@@ -36,3 +36,23 @@ export const validatePlaybackControl = (req: Request, res: Response, next: NextF
     }
     next();
 };
+
+export const validateDeviceRegistration = (req: Request, res: Response, next: NextFunction) => {
+    const schema = Joi.object({
+      deviceId: Joi.string().optional(), // optional สำหรับ auto-generate
+      name: Joi.string().required().min(3).max(100),
+      ip: Joi.string().ip().required(),
+      port: Joi.number().integer().min(1024).max(65535).default(3001),
+      capabilities: Joi.array().items(Joi.string()).default(['video', 'audio']),
+      status: Joi.string().valid('online', 'offline', 'busy').optional()
+    });
+  
+    const { error } = schema.validate(req.body);
+    if (error) {
+      return res.status(400).json({ 
+        success: false, 
+        error: error.details[0].message 
+      });
+    }
+    next();
+  };
