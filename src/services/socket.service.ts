@@ -33,15 +33,15 @@ export class SocketManager {
             ...deviceInfo,
             socketId: socket.id
           });
-          
+
           this.deviceSockets.set(device.deviceId, socket.id);
           socket.join(`device:${device.deviceId}`);
-          
+
           console.log(`Device registered: ${device.name} (${device.deviceId})`);
-          
+
           // Broadcast updated device list
           this.broadcastDeviceList();
-          
+
           socket.emit('device:registered', { success: true, device });
         } catch (error) {
           console.error('Error registering device:', error);
@@ -74,7 +74,7 @@ export class SocketManager {
       // Handle disconnection
       socket.on('disconnect', async () => {
         console.log(`Socket disconnected: ${socket.id}`);
-        
+
         // Find and update device status
         for (const [deviceId, socketId] of this.deviceSockets.entries()) {
           if (socketId === socket.id) {
@@ -83,7 +83,7 @@ export class SocketManager {
             break;
           }
         }
-        
+
         this.broadcastDeviceList();
       });
     });
@@ -114,14 +114,52 @@ export class SocketManager {
     }
   }
 
+  // castToDevice(deviceId: string, mediaFile: MediaFile, options?: any): boolean {
+  //   if (!this.io) return false;
+
+  //   const socketId = this.deviceSockets.get(deviceId);
+  //   if (!socketId) return false;
+
+  //   this.io.to(`device:${deviceId}`).emit('media:play', mediaFile, options);
+  //   return true;
+  // }
   castToDevice(deviceId: string, mediaFile: MediaFile, options?: any): boolean {
-    if (!this.io) return false;
+    console.log('🔌 SocketManager.castToDevice called');
+    console.log('Target device:', deviceId);
+    console.log('Media file:', mediaFile.name);
+    console.log('Options:', options);
+
+    if (!this.io) {
+      console.log('❌ WebSocket server not initialized');
+      return false;
+    }
 
     const socketId = this.deviceSockets.get(deviceId);
-    if (!socketId) return false;
+    console.log('Device socket ID:', socketId);
 
-    this.io.to(`device:${deviceId}`).emit('media:play', mediaFile, options);
-    return true;
+    if (!socketId) {
+      console.log('❌ Device socket not found in deviceSockets map');
+      console.log('Available devices:', Array.from(this.deviceSockets.keys()));
+      return false;
+    }
+
+    try {
+      console.log('📡 Sending cast command to device...');
+      this.io.to(`device:${deviceId}`).emit('media:play', mediaFile, options);
+      console.log('✅ Cast command sent successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ Error sending cast command:', error);
+      return false;
+    }
+  }
+
+  getConnectedDevices(): string[] {
+    return Array.from(this.deviceSockets.keys());
+  }
+
+  isDeviceConnected(deviceId: string): boolean {
+    return this.deviceSockets.has(deviceId);
   }
 
   sendPlaybackControl(deviceId: string, control: PlaybackControl): boolean {
