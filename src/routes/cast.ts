@@ -121,6 +121,7 @@ router.post('/', validateCastRequest, async (req, res) => {
     
     // เพิ่มการตรวจสอบว่า device มี socketId หรือไม่
     if (!device.socketId) {
+      console.log('555555', device)
       console.log('❌ Device has no active WebSocket connection');
       return res.status(400).json({ 
         success: false, 
