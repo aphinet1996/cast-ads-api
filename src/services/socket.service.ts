@@ -37,7 +37,7 @@ export class SocketManager {
           this.deviceSockets.set(device.deviceId, socket.id);
           socket.join(`device:${device.deviceId}`);
 
-          console.log(`Device registered: ${device.name} (${device.deviceId})`);
+          console.log(`Device registered: ${device.deviceName} (${device.deviceId})`);
 
           // Broadcast updated device list
           this.broadcastDeviceList();
