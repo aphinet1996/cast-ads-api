@@ -120,14 +120,14 @@ router.post('/', validateCastRequest, async (req, res) => {
     const socketManager = SocketManager.getInstance();
     
     // เพิ่มการตรวจสอบว่า device มี socketId หรือไม่
-    if (!device.socketId) {
-      console.log('555555', device)
-      console.log('❌ Device has no active WebSocket connection');
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Device is not connected via WebSocket' 
-      });
-    }
+    // if (!device.socketId) {
+    //   console.log('555555', device)
+    //   console.log('❌ Device has no active WebSocket connection');
+    //   return res.status(400).json({ 
+    //     success: false, 
+    //     error: 'Device is not connected via WebSocket' 
+    //   });
+    // }
     
     const success = socketManager.castToDevice(deviceId, mediaFile, options);
     console.log('Cast result:', success);
