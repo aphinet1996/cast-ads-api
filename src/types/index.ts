@@ -62,7 +62,7 @@ export interface PlaybackControl {
 export interface SocketEvents {
   // Client to Server
   'device:register': (deviceInfo: Partial<Device>) => void;
-  'device:heartbeat': (deviceId: string) => void;
+  'device:stimulate': (deviceId: string) => void;
   'media:cast': (castRequest: CastRequest) => void;
   'playback:control': (deviceId: string, control: PlaybackControl) => void;
   'device:status': (deviceId: string, status: Device['status']) => void;

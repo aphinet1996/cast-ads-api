@@ -17,7 +17,7 @@ export class SocketManager {
   initialize(io: SocketIOServer): void {
     this.io = io;
     this.setupEventHandlers();
-    this.startHeartbeat();
+    this.startStimulate();
   }
 
   private setupEventHandlers(): void {
@@ -49,8 +49,8 @@ export class SocketManager {
         }
       });
 
-      // Device heartbeat
-      socket.on('device:heartbeat', async (deviceId: string) => {
+      // Device stimulate
+      socket.on('device:stimulate', async (deviceId: string) => {
         await DeviceService.updateDeviceStatus(deviceId, 'online', socket.id);
         this.deviceSockets.set(deviceId, socket.id);
       });
@@ -179,7 +179,7 @@ export class SocketManager {
     this.io.emit('devices:updated', devices);
   }
 
-  private startHeartbeat(): void {
+  private startStimulate(): void {
     // Mark offline devices every minute
     setInterval(async () => {
       await DeviceService.markOfflineDevices();
