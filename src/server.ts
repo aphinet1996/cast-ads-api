@@ -13,6 +13,9 @@ import { SocketManager } from './services/socket.service';
 import { deviceRoutes } from './routes/devices';
 import { mediaRoutes } from './routes/media';
 import { castRoutes } from './routes/cast';
+import { templateRoutes } from './routes/templates'
+import { gridComposerRoutes } from './routes/grid-composer';
+import { playlistRoutes } from './routes/playlists';
 
 // Load environment variables
 dotenv.config();
@@ -42,6 +45,9 @@ app.use('/media', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/devices', deviceRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/cast', castRoutes);
+app.use('/api/templates', templateRoutes);
+app.use('/api/grid-composer', gridComposerRoutes);
+app.use('/api/playlists', playlistRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
@@ -49,6 +55,21 @@ app.get('/health', (req, res) => {
     status: 'OK', 
     timestamp: new Date().toISOString(),
     uptime: process.uptime()
+  });
+});
+
+// // API Info endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'Cast ADS API',
+    version: process.env.npm_package_version || '1.0.0',
+    description: 'Digital signage casting and template management API',
+    endpoints: {
+      devices: '/api/devices',
+      media: '/api/media',
+      cast: '/api/cast',
+      templates: '/api/templates'
+    }
   });
 });
 

@@ -1,29 +1,3 @@
-// import mongoose, { Schema, Document } from 'mongoose';
-// import { Device as IDevice } from '../types';
-
-// interface DeviceDocument extends Omit<IDevice, 'deviceId'>, Document {
-//     deviceId: string;
-// }
-
-// const deviceSchema = new Schema<DeviceDocument>({
-//     deviceId: { type: String, required: true, unique: true },
-//     name: { type: String, required: true },
-//     ip: { type: String, required: true },
-//     port: { type: Number, default: 3001 },
-//     status: {
-//         type: String,
-//         enum: ['online', 'offline', 'busy'],
-//         default: 'offline'
-//     },
-//     lastSeen: { type: Date, default: Date.now },
-//     capabilities: [{ type: String }],
-//     socketId: { type: String }
-// }, {
-//     timestamps: true
-// });
-
-// export const DeviceModel = mongoose.model<DeviceDocument>('Device', deviceSchema);
-
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import { Device as IDevice, ScreenResolution } from '../types';
 
@@ -52,28 +26,24 @@ const screenResolutionSchema = new Schema<ScreenResolution>({
         required: true,
         min: [1, 'Screen height must be at least 1 pixel']
     }
-}, { _id: false }); // Don't create _id for subdocument
+}, { _id: false });
 
 const deviceSchema = new Schema<DeviceDocument>({
     // Device identification
     serialNumber: { 
         type: String, 
         trim: true,
-        sparse: true, // Allow multiple null/empty values but unique non-null values
-        index: true
+        // sparse: true
     },
     deviceId: { 
         type: String, 
         required: true, 
-        unique: true,
-        trim: true,
-        index: true
+        trim: true
     },
     uniqueId: { 
         type: String, 
         trim: true,
-        sparse: true,
-        index: true
+        // sparse: true
     },
     instanceId: { 
         type: String, 
@@ -92,20 +62,12 @@ const deviceSchema = new Schema<DeviceDocument>({
         trim: true,
         maxlength: [100, 'Device name cannot exceed 100 characters']
     },
-    // name: { 
-    //     type: String, 
-    //     required: true,
-    //     trim: true,
-    //     minlength: [3, 'Display name must be at least 3 characters'],
-    //     maxlength: [100, 'Display name must not exceed 100 characters'],
-    //     index: true
-    // },
+
     modelName: { 
         type: String, 
         trim: true,
         maxlength: [100, 'Model name cannot exceed 100 characters']
     },
-    
     // Network information
     ipAddress: { 
         type: String, 
@@ -159,15 +121,13 @@ const deviceSchema = new Schema<DeviceDocument>({
             values: ['online', 'offline', 'busy'],
             message: 'Status must be online, offline, or busy'
         },
-        default: 'offline',
-        index: true
+        default: 'offline'
     },
     
     // Tracking information
     lastSeen: { 
         type: Date, 
-        default: Date.now,
-        index: true
+        default: Date.now
     },
     socketId: { 
         type: String,

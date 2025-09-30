@@ -1,70 +1,7 @@
-// import Joi from 'joi';
-// import { Request, Response, NextFunction } from 'express';
-
-// export const validateCastRequest = (req: Request, res: Response, next: NextFunction) => {
-//     const schema = Joi.object({
-//         deviceId: Joi.string().required(),
-//         mediaId: Joi.string().required(),
-//         options: Joi.object({
-//             autoplay: Joi.boolean(),
-//             loop: Joi.boolean(),
-//             volume: Joi.number().min(0).max(100),
-//             startTime: Joi.number().min(0)
-//         }).optional()
-//     });
-
-//     const { error } = schema.validate(req.body);
-//     if (error) {
-//         return res.status(400).json({ error: error.details[0].message });
-//     }
-//     next();
-// };
-
-// export const validatePlaybackControl = (req: Request, res: Response, next: NextFunction) => {
-//     const schema = Joi.object({
-//         action: Joi.string().valid('play', 'pause', 'stop', 'seek', 'volume').required(),
-//         value: Joi.number().when('action', {
-//             is: Joi.string().valid('seek', 'volume'),
-//             then: Joi.required(),
-//             otherwise: Joi.optional()
-//         })
-//     });
-
-//     const { error } = schema.validate(req.body);
-//     if (error) {
-//         return res.status(400).json({ error: error.details[0].message });
-//     }
-//     next();
-// };
-
-// export const validateDeviceRegistration = (req: Request, res: Response, next: NextFunction) => {
-//     const schema = Joi.object({
-//       deviceId: Joi.string().optional(), // optional สำหรับ auto-generate
-//       name: Joi.string().required().min(3).max(100),
-//       ip: Joi.string().ip().required(),
-//       port: Joi.number().integer().min(1024).max(65535).default(3001),
-//       capabilities: Joi.array().items(Joi.string()).default(['video', 'audio']),
-//       status: Joi.string().valid('online', 'offline', 'busy').optional()
-//     });
-  
-//     const { error } = schema.validate(req.body);
-//     if (error) {
-//       return res.status(400).json({ 
-//         success: false, 
-//         error: error.details[0].message 
-//       });
-//     }
-//     next();
-//   };
-
 import Joi from 'joi';
 import { Request, Response, NextFunction } from 'express';
 
 export const validateCastRequest = (req: Request, res: Response, next: NextFunction) => {
-    const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    console.log(`[VALIDATION-${requestId}] === Cast Request Validation ===`);
-    console.log(`[VALIDATION-${requestId}] Request body:`, JSON.stringify(req.body, null, 2));
-    
     const schema = Joi.object({
         deviceId: Joi.string().required(),
         mediaId: Joi.string().required(),
@@ -76,38 +13,17 @@ export const validateCastRequest = (req: Request, res: Response, next: NextFunct
         }).optional()
     });
 
-    const { error, value } = schema.validate(req.body, { abortEarly: false });
-    
+    const { error } = schema.validate(req.body);
     if (error) {
-        console.error(`[VALIDATION-${requestId}] ❌ Cast request validation failed`);
-        console.error(`[VALIDATION-${requestId}] Validation errors:`, error.details.map(detail => ({
-            field: detail.path.join('.'),
-            message: detail.message,
-            value: detail.context?.value
-        })));
-        
         return res.status(400).json({ 
             success: false,
-            error: error.details[0].message,
-            validationErrors: error.details.map(detail => ({
-                field: detail.path.join('.'),
-                message: detail.message
-            }))
+            error: error.details[0].message 
         });
     }
-    
-    console.log(`[VALIDATION-${requestId}] ✅ Cast request validation passed`);
-    console.log(`[VALIDATION-${requestId}] Validated data:`, JSON.stringify(value, null, 2));
-    
-    req.body = value;
     next();
 };
 
 export const validatePlaybackControl = (req: Request, res: Response, next: NextFunction) => {
-    const requestId = Date.now().toString(36) + Math.random().toString(36).substr(2);
-    console.log(`[VALIDATION-${requestId}] === Playback Control Validation ===`);
-    console.log(`[VALIDATION-${requestId}] Request body:`, JSON.stringify(req.body, null, 2));
-    
     const schema = Joi.object({
         action: Joi.string().valid('play', 'pause', 'stop', 'seek', 'volume').required(),
         value: Joi.number().when('action', {
@@ -117,30 +33,177 @@ export const validatePlaybackControl = (req: Request, res: Response, next: NextF
         })
     });
 
-    const { error, value } = schema.validate(req.body, { abortEarly: false });
-    
+    const { error } = schema.validate(req.body);
     if (error) {
-        console.error(`[VALIDATION-${requestId}] ❌ Playback control validation failed`);
-        console.error(`[VALIDATION-${requestId}] Validation errors:`, error.details.map(detail => ({
-            field: detail.path.join('.'),
-            message: detail.message,
-            value: detail.context?.value
-        })));
-        
         return res.status(400).json({ 
             success: false,
-            error: error.details[0].message,
-            validationErrors: error.details.map(detail => ({
-                field: detail.path.join('.'),
-                message: detail.message
-            }))
+            error: error.details[0].message 
+        });
+    }
+    next();
+};
+
+// Template validation schemas
+export const validateTemplateRequest = (req: Request, res: Response, next: NextFunction) => {
+    const imageSchema = Joi.object({
+        mediaId: Joi.string().required(),
+        name: Joi.string().required(),
+        type: Joi.string().valid('image', 'video', 'audio', 'document', 'presentation').required(),
+        url: Joi.string().uri().required(),
+        size: Joi.number().min(0).optional(),
+        mimeType: Joi.string().optional(),
+        duration: Joi.number().min(0).optional(),
+        thumbnail: Joi.string().uri().optional(),
+
+        originalName: Joi.string().optional(),
+        path: Joi.string().optional(),
+        uploadedAt: Joi.date().optional(),
+        metadata: Joi.object().optional()
+    }).unknown(true);
+
+    const schema = Joi.object({
+        name: Joi.string().trim().min(1).max(255).required().messages({
+            'string.empty': 'Template name is required',
+            'string.max': 'Template name cannot exceed 255 characters'
+        }),
+        type: Joi.string().valid('split-horizontal', 'quad', 'fullscreen').required().messages({
+            'any.only': 'Template type must be one of: split-horizontal, quad, fullscreen'
+        }),
+        images: Joi.object().pattern(
+            Joi.string().pattern(/^[0-9]+$/), // keys must be numeric strings
+            imageSchema
+        ).required().messages({
+            'object.base': 'Images must be an object with numeric keys'
+        }),
+        width: Joi.number().integer().min(1).max(10000).required().messages({
+            'number.min': 'Width must be at least 1',
+            'number.max': 'Width cannot exceed 10000'
+        }),
+        height: Joi.number().integer().min(1).max(10000).required().messages({
+            'number.min': 'Height must be at least 1',
+            'number.max': 'Height cannot exceed 10000'
+        }),
+        createdAt: Joi.date().optional()
+    });
+
+    const { error } = schema.validate(req.body, { abortEarly: false });
+    if (error) {
+        const errors = error.details.map(detail => detail.message);
+        return res.status(400).json({ 
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+    next();
+};
+
+export const validateTemplateCastRequest = (req: Request, res: Response, next: NextFunction) => {
+    const schema = Joi.object({
+        templateId: Joi.string().required().messages({
+            'string.empty': 'Template ID is required'
+        }),
+        deviceId: Joi.string().required().messages({
+            'string.empty': 'Device ID is required'
+        }),
+        options: Joi.object({
+            autoplay: Joi.boolean().default(true),
+            loop: Joi.boolean().default(false),
+            volume: Joi.number().min(0).max(100).default(50),
+            startTime: Joi.number().min(0).default(0),
+            duration: Joi.number().min(0).optional(),
+            transition: Joi.object({
+                type: Joi.string().valid('fade', 'slide', 'none').default('fade'),
+                duration: Joi.number().min(0).max(5000).default(1000) // milliseconds
+            }).optional()
+        }).optional().default({})
+    });
+
+    const { error, value } = schema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ 
+            success: false,
+            error: error.details[0].message 
         });
     }
     
-    console.log(`[VALIDATION-${requestId}] ✅ Playback control validation passed`);
-    console.log(`[VALIDATION-${requestId}] Validated data:`, JSON.stringify(value, null, 2));
-    
+    // Replace req.body with validated and default values
     req.body = value;
+    next();
+};
+
+export const validateTemplateUpdate = (req: Request, res: Response, next: NextFunction) => {
+    const imageSchema = Joi.object({
+        mediaId: Joi.string().required(),
+        name: Joi.string().required(),
+        type: Joi.string().valid('image', 'video', 'audio', 'document', 'presentation').required(),
+        url: Joi.string().uri().required(),
+        size: Joi.number().min(0).optional(),
+        mimeType: Joi.string().optional(),
+        duration: Joi.number().min(0).optional(),
+        thumbnail: Joi.string().uri().optional()
+    });
+
+    const schema = Joi.object({
+        name: Joi.string().trim().min(1).max(255).optional(),
+        type: Joi.string().valid('split-horizontal', 'quad', 'fullscreen').optional(),
+        images: Joi.object().pattern(
+            Joi.string().pattern(/^[0-9]+$/),
+            imageSchema
+        ).optional(),
+        width: Joi.number().integer().min(1).max(10000).optional(),
+        height: Joi.number().integer().min(1).max(10000).optional()
+    }).min(1).messages({
+        'object.min': 'At least one field must be provided for update'
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error) {
+        const errors = error.details.map(detail => detail.message);
+        return res.status(400).json({ 
+            success: false,
+            error: 'Validation failed',
+            details: errors
+        });
+    }
+    next();
+};
+
+export const validateDuplicateTemplate = (req: Request, res: Response, next: NextFunction) => {
+    const schema = Joi.object({
+        name: Joi.string().trim().min(1).max(255).optional()
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error) {
+        return res.status(400).json({ 
+            success: false,
+            error: error.details[0].message 
+        });
+    }
+    next();
+};
+
+// Query parameter validation
+export const validateTemplateQuery = (req: Request, res: Response, next: NextFunction) => {
+    const schema = Joi.object({
+        type: Joi.string().valid('split-horizontal', 'quad', 'fullscreen').optional(),
+        search: Joi.string().trim().min(1).max(100).optional(),
+        limit: Joi.number().integer().min(1).max(100).default(50).optional(),
+        offset: Joi.number().integer().min(0).default(0).optional(),
+        sortBy: Joi.string().valid('name', 'createdAt', 'updatedAt', 'type').default('createdAt').optional(),
+        sortOrder: Joi.string().valid('asc', 'desc').default('desc').optional()
+    });
+
+    const { error, value } = schema.validate(req.query);
+    if (error) {
+        return res.status(400).json({ 
+            success: false,
+            error: error.details[0].message 
+        });
+    }
+    
+    req.query = value;
     next();
 };
 
