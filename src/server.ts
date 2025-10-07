@@ -26,7 +26,9 @@ const io = new SocketIOServer(server, {
   cors: {
     // origin: process.env.FRONTEND_URL,
     origin: "*",
-    methods: ["GET", "POST"]
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
   }
 });
 
