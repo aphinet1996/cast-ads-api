@@ -103,4 +103,11 @@ export class MediaService {
             uploadedAt: file.uploadedAt
         };
     }
+
+    static async updateMediaDuration(mediaId: string, duration: number): Promise<void> {
+        await MediaFileModel.updateOne(
+            { mediaId },
+            { duration }
+        );
+    }
 }

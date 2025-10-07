@@ -132,7 +132,6 @@ router.post('/register', validateDeviceRegistration, async (req, res) => {
     console.log(`[DEVICE-REGISTER-${requestId}] - Device ID: ${deviceInfo.deviceId || 'auto-generate'}`);
     console.log(`[DEVICE-REGISTER-${requestId}] - Unique ID: ${deviceInfo.uniqueId || 'not provided'}`);
     console.log(`[DEVICE-REGISTER-${requestId}] - Serial Number: ${deviceInfo.serialNumber || 'not provided'}`);
-    // console.log(`[DEVICE-REGISTER-${requestId}] - Name: ${deviceInfo.name}`);
     console.log(`[DEVICE-REGISTER-${requestId}] - IP Address: ${deviceInfo.ipAddress}`);
     console.log(`[DEVICE-REGISTER-${requestId}] - Port: ${deviceInfo.port || 3001}`);
     console.log(`[DEVICE-REGISTER-${requestId}] - Device OS: ${deviceInfo.deviceOS || 'not provided'}`);

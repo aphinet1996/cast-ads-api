@@ -44,7 +44,7 @@ export interface MediaFile {
 export interface Template {
   id: string;
   name: string;
-  type: 'split-horizontal' | 'quad' | 'fullscreen';
+  type: 'split-horizontal' | 'triple' | 'quad' | 'fullscreen';
   images: { [key: number]: MediaFile };
   width: number;
   height: number;
@@ -55,7 +55,7 @@ export interface Template {
 
 export interface CreateTemplateRequest {
   name: string;
-  type: 'split-horizontal' | 'quad' | 'fullscreen';
+  type: 'split-horizontal' | 'triple' | 'quad' | 'fullscreen';
   images: { [key: number]: MediaFile };
   width: number;
   height: number;
@@ -63,7 +63,7 @@ export interface CreateTemplateRequest {
 
 export interface UpdateTemplateRequest {
   name?: string;
-  type?: 'split-horizontal' | 'quad' | 'fullscreen';
+  type?: 'split-horizontal' | 'triple' | 'quad' | 'fullscreen';
   images?: { [key: number]: MediaFile };
   width?: number;
   height?: number;
@@ -89,6 +89,7 @@ export interface TemplateStats {
   total: number;
   byType: {
     'split-horizontal': number;
+    'triple': number;
     'quad': number;
     'fullscreen': number;
   };
@@ -212,7 +213,7 @@ export interface DeviceCapabilities {
     height: number;
   };
   supportedFormats?: string[];
-  templateTypes?: Array<'split-horizontal' | 'quad' | 'fullscreen'>;
+  templateTypes?: Array<'split-horizontal' | 'triple' | 'quad' | 'fullscreen'>;
 }
 
 export interface TemplateSlot {
@@ -228,7 +229,7 @@ export interface TemplateSlot {
 }
 
 export interface TemplateLayout {
-  type: 'split-horizontal' | 'quad' | 'fullscreen';
+  type: 'split-horizontal' | 'triple' | 'quad' | 'fullscreen';
   slots: TemplateSlot[];
   dimensions: {
     width: number;
@@ -273,7 +274,7 @@ export interface SystemStats {
     };
   };
   templates: TemplateStats;
-  playlists: PlaylistStats; // เพิ่มใหม่
+  playlists: PlaylistStats;
   casts: {
     active: number;
     totalToday: number;

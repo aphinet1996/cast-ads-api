@@ -137,7 +137,6 @@ export class DeviceService {
     }
 
     private static async findExistingDevice(deviceId: string, deviceInfo: Partial<Device>): Promise<DeviceDocument | null> {
-        // Look for device by multiple identifiers
         const query: any = {
             $or: [
                 { deviceId: deviceId }
@@ -169,7 +168,6 @@ export class DeviceService {
             ...(deviceInfo.serialNumber !== undefined && { serialNumber: deviceInfo.serialNumber.trim() }),
             ...(deviceInfo.deviceOS !== undefined && { deviceOS: deviceInfo.deviceOS.trim() }),
             ...(deviceInfo.deviceName !== undefined && { deviceName: deviceInfo.deviceName.trim() }),
-            // ...(deviceInfo.name !== undefined && { name: deviceInfo.name.trim() }),
             ...(deviceInfo.ipAddress !== undefined && { ipAddress: deviceInfo.ipAddress }),
             ...(deviceInfo.instanceId !== undefined && { instanceId: deviceInfo.instanceId.trim() }),
             ...(deviceInfo.macAddress !== undefined && { macAddress: deviceInfo.macAddress.trim() }),

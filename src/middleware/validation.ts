@@ -66,8 +66,8 @@ export const validateTemplateRequest = (req: Request, res: Response, next: NextF
             'string.empty': 'Template name is required',
             'string.max': 'Template name cannot exceed 255 characters'
         }),
-        type: Joi.string().valid('split-horizontal', 'quad', 'fullscreen').required().messages({
-            'any.only': 'Template type must be one of: split-horizontal, quad, fullscreen'
+        type: Joi.string().valid('split-horizontal', 'triple', 'quad', 'fullscreen').required().messages({
+            'any.only': 'Template type must be one of: split-horizontal, triple, quad, fullscreen'
         }),
         images: Joi.object().pattern(
             Joi.string().pattern(/^[0-9]+$/), // keys must be numeric strings

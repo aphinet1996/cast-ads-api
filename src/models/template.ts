@@ -41,8 +41,8 @@ const templateSchema = new Schema<TemplateDocument>({
     type: {
         type: String,
         enum: {
-            values: ['split-horizontal', 'quad', 'fullscreen'],
-            message: 'Template type must be one of: split-horizontal, quad, fullscreen'
+            values: ['split-horizontal', 'triple', 'quad', 'fullscreen'],
+            message: 'Template type must be one of: split-horizontal, triple, quad, fullscreen'
         },
         required: [true, 'Template type is required']
     },
