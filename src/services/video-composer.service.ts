@@ -352,40 +352,57 @@ export class VideoComposerService {
     //     });
     // }
 
-    private static scaleVideo(
+    private static async scaleVideo(
         inputPath: string,
         outputPath: string,
         width: number,
         height: number,
         duration: number
-    ): Promise<void> {
+      ): Promise<void> {
+        // ตรวจสอบว่ามี audio หรือไม่
+        const hasAudio = await this.hasAudio(inputPath);
+        console.log(`[SCALE-VIDEO] Input has audio: ${hasAudio}`);
+      
         return new Promise((resolve, reject) => {
-            ffmpeg(inputPath)
-                .videoCodec('libx264')
-                .size(`${width}x${height}`)
-                .fps(30)
-                .audioCodec('copy')  // เพิ่มบรรทัดนี้ - copy audio stream
-                .outputOptions([
-                    '-pix_fmt yuv420p',
-                    '-preset ultrafast',
-                    '-crf 23',
-                    `-t ${duration}`
-                ])
-                .output(outputPath)
-                .on('start', (cmd) => {
-                    console.log('[FFMPEG] Scale video command:', cmd);
-                })
-                .on('end', () => {
-                    console.log('[FFMPEG] ✅ Video scaled');
-                    resolve();
-                })
-                .on('error', (err) => {
-                    console.error('[FFMPEG] ❌ Error scaling video:', err);
-                    reject(err);
-                })
-                .run();
+          let command = ffmpeg(inputPath)
+            .videoCodec('libx264')
+            .size(`${width}x${height}`)
+            .fps(30);
+      
+          // เพิ่ม audio codec ถ้ามี audio
+          if (hasAudio) {
+            command = command
+              .audioCodec('aac')
+              .audioBitrate('192k')
+              .audioChannels(2)
+              .audioFrequency(48000);
+          } else {
+            console.log('[SCALE-VIDEO] No audio in input - creating video only');
+          }
+      
+          command
+            .outputOptions([
+              '-pix_fmt yuv420p',
+              '-preset ultrafast',
+              '-crf 23',
+              `-t ${duration}`,
+              '-shortest'
+            ])
+            .output(outputPath)
+            .on('start', (cmd) => {
+              console.log('[FFMPEG] Scale video command:', cmd);
+            })
+            .on('end', () => {
+              console.log(`[FFMPEG] ✅ Video scaled${hasAudio ? ' with audio' : ''}`);
+              resolve();
+            })
+            .on('error', (err) => {
+              console.error('[FFMPEG] ❌ Error scaling video:', err);
+              reject(err);
+            })
+            .run();
         });
-    }
+      }
 
     private static async convertImageToJpg(inputPath: string, outputPath: string): Promise<void> {
         await sharp(inputPath)
@@ -554,52 +571,44 @@ export class VideoComposerService {
           console.log('[FFMPEG] ========================================');
           console.log('[FFMPEG] Composing video...');
       
-          // เพิ่ม inputs
           inputFiles.forEach((file, idx) => {
             console.log(`[FFMPEG] Input ${idx}: ${file}`);
             command = command.input(file);
           });
       
-          // ต้องเรียงลำดับให้ถูกต้อง:
-          // 1. complexFilter
-          // 2. map video
-          // 3. map audio (ถ้ามี)
-          // 4. codec settings
-          // 5. output options
-          
           command.complexFilter([filterComplex + '[v]']);
-          
-          // Map streams
+      
+          const outputOptions = [
+            '-map [v]',
+            '-c:v libx264',
+            '-preset medium',
+            '-crf 23',
+            '-pix_fmt yuv420p',
+            `-t ${duration}`,
+            '-movflags +faststart'
+          ];
+      
           if (audioInputIndex !== null) {
             console.log(`[FFMPEG] Mapping audio from input ${audioInputIndex}`);
-            command
-              .outputOptions([
-                '-map [v]',              // Map video
-                `-map ${audioInputIndex}:a`,  // Map audio
-                '-c:v libx264',          // Video codec
-                '-c:a aac',              // Audio codec
-                '-b:a 128k',             // Audio bitrate
-                '-preset medium',
-                '-crf 23',
-                '-pix_fmt yuv420p',
-                `-t ${duration}`,
-                '-movflags +faststart'
-              ]);
+            
+            // ปรับ audio settings ให้เข้ากันได้ดีกับ Android
+            outputOptions.splice(1, 0,
+              `-map ${audioInputIndex}:a`,
+              '-c:a aac',                    // AAC codec (standard)
+              '-b:a 192k',                   // เพิ่ม bitrate จาก 128k → 192k
+              '-ar 48000',                   // Sample rate 48kHz (standard)
+              '-ac 2',                       // Stereo (2 channels)
+              '-profile:a aac_low',          // AAC-LC profile (widely supported)
+              '-movflags +faststart'         // Enable fast start for streaming
+            );
           } else {
             console.log('[FFMPEG] No audio source found - creating silent video');
-            command
-              .outputOptions([
-                '-map [v]',              // Map video only
-                '-c:v libx264',          // Video codec
-                '-preset medium',
-                '-crf 23',
-                '-pix_fmt yuv420p',
-                `-t ${duration}`,
-                '-movflags +faststart'
-              ]);
           }
       
+          console.log('[FFMPEG] Output options:', outputOptions);
+      
           command
+            .outputOptions(outputOptions)
             .output(outputPath)
             .on('start', (cmd) => {
               console.log('[FFMPEG] Command:', cmd);
@@ -628,7 +637,6 @@ export class VideoComposerService {
             .run();
         });
       }
-
     private static async cleanupTempFiles(files: string[]): Promise<void> {
         console.log('[VIDEO-COMPOSER] Cleaning up temp files...');
         for (const file of files) {
