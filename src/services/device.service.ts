@@ -360,6 +360,230 @@
 //     }
 // }
 
+// รอบ 2
+// import { DeviceModel, type DeviceDocument } from '../models/device';
+// import { Device } from '../types';
+
+// export class DeviceService {
+//     /**
+//      * Find all online devices
+//      */
+//     static async findOnlineDevices(): Promise<DeviceDocument[]> {
+//         return await DeviceModel.find({ status: 'online' });
+//     }
+
+//     /**
+//      * Find devices by capability
+//      */
+//     static async findByCapability(capability: string): Promise<DeviceDocument[]> {
+//         return await DeviceModel.find({ capabilities: capability });
+//     }
+
+//     /**
+//      * Find devices by IP address
+//      */
+//     static async findByIP(ipAddress: string): Promise<DeviceDocument[]> {
+//         return await DeviceModel.find({ ipAddress });
+//     }
+
+//     /**
+//      * Find device by ID (alias for findByIdentifier for backward compatibility)
+//      */
+//     static async getDeviceById(deviceId: string): Promise<DeviceDocument | null> {
+//         return await DeviceModel.findOne({ deviceId });
+//     }
+
+//     /**
+//      * Find device by multiple identifiers
+//      */
+//     static async findByIdentifier(identifier: string): Promise<DeviceDocument | null> {
+//         return await DeviceModel.findOne({
+//             $or: [
+//                 { deviceId: identifier },
+//                 { uniqueId: identifier },
+//                 { serialNumber: identifier }
+//             ]
+//         });
+//     }
+
+//     /**
+//      * Check if device is online (based on lastSeen)
+//      */
+//     static isDeviceOnline(device: DeviceDocument): boolean {
+//         const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+//         return device.status === 'online' && device.lastSeen > fiveMinutesAgo;
+//     }
+
+//     /**
+//      * Mark stale devices as offline (alias for backward compatibility)
+//      */
+//     static async markOfflineDevices(minutes: number = 5) {
+//         return await DeviceService.markStaleDevicesOffline(minutes);
+//     }
+
+//     /**
+//      * Mark stale devices as offline
+//      */
+//     static async markStaleDevicesOffline(minutes: number = 5) {
+//         const cutoff = new Date(Date.now() - minutes * 60 * 1000);
+//         const result = await DeviceModel.updateMany(
+//             {
+//                 lastSeen: { $lt: cutoff },
+//                 status: { $ne: 'offline' }
+//             },
+//             { status: 'offline' }
+//         );
+//         return result;
+//     }
+
+//     /**
+//      * Update device last seen timestamp
+//      */
+//     static async updateLastSeen(deviceId: string): Promise<DeviceDocument | null> {
+//         return await DeviceModel.findOneAndUpdate(
+//             { deviceId },
+//             { lastSeen: new Date() },
+//             { new: true }
+//         );
+//     }
+
+//     /**
+//      * Update device status with optional socketId
+//      */
+//     static async updateDeviceStatus(
+//         deviceId: string,
+//         status: 'online' | 'offline' | 'busy',
+//         socketId?: string
+//     ): Promise<DeviceDocument | null> {
+//         const updateData: any = {
+//             status,
+//             lastSeen: new Date()
+//         };
+
+//         if (socketId) {
+//             updateData.socketId = socketId;
+//         }
+
+//         return await DeviceModel.findOneAndUpdate(
+//             { deviceId },
+//             updateData,
+//             { new: true }
+//         );
+//     }
+
+//     /**
+//      * Register or update device
+//      */
+//     static async registerDevice(deviceData: Partial<Device>): Promise<DeviceDocument> {
+//         const existingDevice = await DeviceModel.findOne({ deviceId: deviceData.deviceId });
+
+//         if (existingDevice) {
+//             // Update existing device
+//             Object.assign(existingDevice, deviceData);
+//             existingDevice.lastSeen = new Date();
+//             existingDevice.status = 'online';
+//             return await existingDevice.save();
+//         } else {
+//             // Create new device
+//             const newDevice = new DeviceModel({
+//                 ...deviceData,
+//                 status: 'online',
+//                 lastSeen: new Date()
+//             });
+//             return await newDevice.save();
+//         }
+//     }
+
+//     /**
+//      * Get all devices with filters
+//      */
+//     static async getAllDevices(filters: {
+//         status?: string;
+//         capability?: string;
+//         search?: string;
+//     } = {}): Promise<DeviceDocument[]> {
+//         const query: any = {};
+
+//         if (filters.status) {
+//             query.status = filters.status;
+//         }
+
+//         if (filters.capability) {
+//             query.capabilities = filters.capability;
+//         }
+
+//         if (filters.search) {
+//             query.$text = { $search: filters.search };
+//         }
+
+//         return await DeviceModel.find(query).sort({ lastSeen: -1 });
+//     }
+
+//     /**
+//      * Delete device by ID
+//      */
+//     static async deleteDevice(deviceId: string): Promise<DeviceDocument | null> {
+//         return await DeviceModel.findOneAndDelete({ deviceId });
+//     }
+
+//     /**
+//      * Get device statistics
+//      */
+//     static async getDeviceStats() {
+//         const total = await DeviceModel.countDocuments();
+//         const online = await DeviceModel.countDocuments({ status: 'online' });
+//         const offline = await DeviceModel.countDocuments({ status: 'offline' });
+//         const busy = await DeviceModel.countDocuments({ status: 'busy' });
+
+//         return {
+//             total,
+//             online,
+//             offline,
+//             busy
+//         };
+//     }
+
+//     static async updateDeviceName(deviceId: string, newName: string): Promise<DeviceDocument | null> {
+//         // Validate name
+//         if (!newName || newName.trim().length === 0) {
+//             throw new Error('Device name cannot be empty');
+//         }
+
+//         if (newName.trim().length > 100) {
+//             throw new Error('Device name cannot exceed 100 characters');
+//         }
+
+//         // Update device name
+//         const updatedDevice = await DeviceModel.findOneAndUpdate(
+//             { deviceId },
+//             {
+//                 deviceName: newName.trim(),
+//                 lastSeen: new Date()
+//             },
+//             {
+//                 new: true,
+//                 runValidators: true
+//             }
+//         );
+
+//         if (!updatedDevice) {
+//             throw new Error(`Device not found: ${deviceId}`);
+//         }
+
+//         return updatedDevice;
+//     }
+
+//     /**
+//      * Convert device to public JSON (remove sensitive data)
+//      */
+//     static toPublicJSON(device: DeviceDocument) {
+//         const obj = device.toObject ? device.toObject() : device;
+//         delete obj.__v;
+//         // Add more fields to remove if needed
+//         return obj;
+//     }
+// }
+
 import { DeviceModel, type DeviceDocument } from '../models/device';
 import { Device } from '../types';
 

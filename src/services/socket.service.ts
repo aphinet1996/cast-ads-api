@@ -364,7 +364,7 @@ export class SocketManager {
           // Broadcast updated device list
           this.broadcastDeviceList();
 
-          socket.emit('device:registered', { success: true, device });
+          socket.emit('device:register', { success: true, device });
         } catch (error) {
           console.error('Error registering device:', error);
           socket.emit('error', 'Failed to register device');
