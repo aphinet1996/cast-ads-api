@@ -15,7 +15,7 @@ export class PlaylistService {
 
         // Validate all media files exist
         for (const item of data.items) {
-            const media = await MediaService.getMediaFileById(item.mediaId);
+            const media = await MediaService.findByMediaId(item.mediaId);
             if (!media) {
                 throw new Error(`Media file not found: ${item.mediaId}`);
             }
@@ -162,7 +162,7 @@ export class PlaylistService {
 
         const itemsWithMedia: Array<PlaylistItemWithMedia | null> = await Promise.all(
             playlist.items.map(async (item) => {
-                const media = await MediaService.getMediaFileById(item.mediaId);
+                const media = await MediaService.findByMediaId(item.mediaId);
 
                 if (!media) {
                     console.error(`Media not found: ${item.mediaId}`);

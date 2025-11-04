@@ -1,25 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import { MediaFile as IMediaFile } from '../types';
 
-interface MediaFileDocument extends Document {
-    mediaId: string;
-    name: string;
-    originalName: string;
-    path: string;
-    url: string;
-    type: 'video' | 'audio' | 'image' | 'document' | 'presentation';
-    mimeType: string;
-    size: number;
-    duration?: number;
-    thumbnail?: string;
-    metadata: {
-        width?: number;
-        height?: number;
-        bitrate?: number;
-        codec?: string;
-    };
-    uploadedAt: Date;
-}
+export interface MediaFileDocument extends IMediaFile, Document {}
 
 const mediaFileSchema = new Schema<MediaFileDocument>({
     mediaId: {
@@ -83,7 +65,6 @@ const mediaFileSchema = new Schema<MediaFileDocument>({
     collection: 'mediafiles'
 });
 
-// Add indexes for better performance
 mediaFileSchema.index({ type: 1 });
 mediaFileSchema.index({ uploadedAt: -1 });
 

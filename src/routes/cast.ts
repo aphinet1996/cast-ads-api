@@ -21,7 +21,7 @@ router.post('/', validateCastRequest, async (req, res) => {
     }
 
     // Verify media file exists
-    const mediaFile = await MediaService.getMediaFileById(mediaId);
+    const mediaFile = await MediaService.findByMediaId(mediaId);
     if (!mediaFile) {
       return res.status(404).json({ success: false, error: 'Media file not found' });
     }
@@ -69,84 +69,3 @@ router.post('/:deviceId/control', validatePlaybackControl, async (req, res) => {
 });
 
 export const castRoutes = router;
-
-// import { Router } from 'express';
-// import { validateCastRequest, validatePlaybackControl } from '../middleware/validation';
-// import { DeviceService } from '../services/device.service';
-// import { MediaService } from '../services/media.service';
-// import { SocketManager } from '../services/socket.service';
-
-// const router = Router();
-
-// router.post('/', validateCastRequest, async (req, res) => {
-//   try {
-//     const { deviceId, mediaId, options } = req.body;
-    
-//     console.log('=== CAST REQUEST DEBUG ===');
-//     console.log('Request Body:', { deviceId, mediaId, options });
-
-//     // 1. ตรวจสอบ Device
-//     console.log('1. Checking device...');
-//     const device = await DeviceService.getDeviceById(deviceId);
-//     console.log('Device found:', device);
-    
-//     if (!device) {
-//       console.log('❌ Device not found');
-//       return res.status(404).json({ success: false, error: 'Device not found' });
-//     }
-    
-//     if (device.status !== 'online') {
-//       console.log('❌ Device not online, current status:', device.status);
-//       return res.status(400).json({ 
-//         success: false, 
-//         error: `Device is not online (current status: ${device.status})` 
-//       });
-//     }
-//     console.log('✅ Device is online');
-
-//     // 2. ตรวจสอบ Media File
-//     console.log('2. Checking media file...');
-//     const mediaFile = await MediaService.getMediaFileById(mediaId);
-//     console.log('Media file found:', mediaFile);
-    
-//     if (!mediaFile) {
-//       console.log('❌ Media file not found');
-//       return res.status(404).json({ success: false, error: 'Media file not found' });
-//     }
-//     console.log('✅ Media file exists');
-
-//     // 3. ตรวจสอบ WebSocket Connection
-//     console.log('3. Attempting to cast via WebSocket...');
-//     const socketManager = SocketManager.getInstance();
-    
-//     // เพิ่มการตรวจสอบว่า device มี socketId หรือไม่
-//     // if (!device.socketId) {
-//     //   console.log('555555', device)
-//     //   console.log('❌ Device has no active WebSocket connection');
-//     //   return res.status(400).json({ 
-//     //     success: false, 
-//     //     error: 'Device is not connected via WebSocket' 
-//     //   });
-//     // }
-    
-//     const success = socketManager.castToDevice(deviceId, mediaFile, options);
-//     console.log('Cast result:', success);
-
-//     if (success) {
-//       console.log('✅ Cast command sent successfully');
-//       await DeviceService.updateDeviceStatus(deviceId, 'busy');
-//       res.json({ success: true, message: 'Media cast successfully' });
-//     } else {
-//       console.log('❌ Cast command failed to send');
-//       res.status(400).json({ success: false, error: 'Failed to cast media - device not reachable via WebSocket' });
-//     }
-    
-//     console.log('=== END CAST REQUEST ===\n');
-    
-//   } catch (error) {
-//     console.error('❌ Cast error:', error);
-//     res.status(500).json({ success: false, error: 'Internal server error' });
-//   }
-// });
-
-// export const castRoutes = router;

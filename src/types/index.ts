@@ -3,7 +3,7 @@ export interface ScreenResolution {
   height: number;
 }
 export interface Device {
-  serialNumber: string;
+  // serialNumber: string;
   deviceId: string;
   deviceOS: string;
   deviceName: string;
@@ -12,9 +12,9 @@ export interface Device {
   macAddress: string;
   modelName: string;
   uniqueId: string;
-  port: number;
+  // port: number;
   screenResolution: ScreenResolution;
-  capabilities: string[];
+  // capabilities: string[];
   status: 'online' | 'offline' | 'busy';
   lastSeen: Date;
   currentMedia?: MediaFile;
@@ -158,6 +158,7 @@ export interface SocketEvents {
   // Client to Server
   'device:register': (deviceInfo: Partial<Device>) => void;
   'device:stimulate': (deviceId: string) => void;
+  'device:update-name': (deviceId: string, name: string) => void;
   'media:cast': (castRequest: CastRequest) => void;
   'template:cast': (templateCastRequest: TemplateCastRequest) => void;
   'playlist:cast': (playlistCastRequest: PlaylistCastRequest) => void;
@@ -166,6 +167,7 @@ export interface SocketEvents {
 
   // Server to Client
   'devices:updated': (devices: Device[]) => void;
+  'device:updated': (device: Device) => void;
   'media:play': (mediaFile: MediaFile, options?: any) => void;
   'template:play': (template: Template, options?: any) => void;
   'template:stop': () => void;

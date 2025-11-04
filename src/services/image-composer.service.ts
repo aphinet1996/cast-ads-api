@@ -65,7 +65,7 @@ export class ImageComposerService {
 
     static async createGridComposite(config: GridComposerConfig): Promise<{
         path: string;
-        filename: string;
+        name: string;
         size: number;
         duration?: number;
         type: 'image' | 'video';
@@ -146,7 +146,7 @@ export class ImageComposerService {
 
             return {
                 path: outputPath,
-                filename: outputFilename,
+                name: outputFilename,
                 size: stats.size,
                 type: 'image'
             };

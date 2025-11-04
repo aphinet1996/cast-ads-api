@@ -10,8 +10,8 @@ import dotenv from 'dotenv';
 
 import { connectDatabase } from './config/db';
 import { SocketManager } from './services/socket.service';
-import { deviceRoutes } from './routes/devices';
-import { mediaRoutes } from './routes/media';
+import deviceRoutes from './routes/devices';
+import mediaRoutes from './routes/media';
 import { castRoutes } from './routes/cast';
 import { templateRoutes } from './routes/templates'
 import { gridComposerRoutes } from './routes/grid-composer';
