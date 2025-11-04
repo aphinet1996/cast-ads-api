@@ -713,6 +713,7 @@ export class DeviceService {
                 status: 'online',
                 lastSeen: new Date()
             });
+            console.log('regis device', newDevice)
             return await newDevice.save();
         }
     }
@@ -739,7 +740,22 @@ export class DeviceService {
             query.$text = { $search: filters.search };
         }
 
-        return await DeviceModel.find(query).sort({ lastSeen: -1 });
+        const devices = await DeviceModel.find(query);
+        
+        // Sort by IP address (convert to number for proper sorting)
+        return devices.sort((a, b) => {
+            const ipA = this.ipToNumber(a.ipAddress);
+            const ipB = this.ipToNumber(b.ipAddress);
+            return ipA - ipB;
+        });
+    }
+
+    /**
+     * Convert IP address to number for sorting
+     */
+    private static ipToNumber(ip: string): number {
+        return ip.split('.')
+            .reduce((acc, octet) => (acc << 8) + parseInt(octet, 10), 0) >>> 0;
     }
 
     /**
