@@ -500,6 +500,16 @@ export class SocketManager {
     if (!socketId) return false;
 
     this.io.to(`device:${deviceId}`).emit('media:play', mediaFile, options);
+
+    // เพิ่ม: Emit 'cast:success' ไป all clients (sync dashboard)
+    this.io.emit('cast:success', {
+      deviceId,
+      mediaName: mediaFile.name,
+      mediaId: mediaFile.mediaId,
+      options: options || { autoplay: true, volume: 50 }
+    });
+    
+    console.log(`[SOCKET] Cast success emitted for ${mediaFile.name} to ${deviceId}`);
     return true;
   }
 

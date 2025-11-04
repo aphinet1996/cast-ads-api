@@ -33,7 +33,25 @@ router.post('/', validateCastRequest, async (req, res) => {
     if (success) {
       // Update device status
       await DeviceService.updateDeviceStatus(deviceId, 'busy');
-      res.json({ success: true, message: 'Media cast successfully' });
+      
+      const socketManager = SocketManager.getInstance();
+      socketManager.broadcast('cast:success', {
+        deviceId,
+        mediaName: mediaFile.name,
+        mediaId,
+        options: options || { autoplay: true, volume: 50 }
+      });
+
+      res.json({
+        success: true,
+        message: 'Media cast successfully',
+        data: {
+          deviceId,
+          mediaName: mediaFile.name,
+          mediaId,
+          options: options || { autoplay: true, volume: 50 }
+        }
+      });
     } else {
       res.status(400).json({ success: false, error: 'Failed to cast media' });
     }
