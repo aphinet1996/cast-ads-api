@@ -17,7 +17,7 @@ export interface Device {
   // capabilities: string[];
   status: 'online' | 'offline' | 'busy';
   lastSeen: Date;
-  currentMedia?: MediaFile;
+  currentMedia?: MediaFile | null;
   socketId?: string;
 }
 
