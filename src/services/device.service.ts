@@ -162,7 +162,7 @@ export class DeviceService {
 
         return await DeviceModel.findOneAndUpdate(
             { deviceId },
-            { 
+            {
                 $set: updateData,
                 $unset: { currentMedia: 1 }
             },
@@ -173,18 +173,51 @@ export class DeviceService {
     /**
      * Register or update device (initialize currentMedia)
      */
+    // static async registerDevice(deviceData: Partial<Device>): Promise<DeviceDocument> {
+    //     const existingDevice = await DeviceModel.findOne({ deviceId: deviceData.deviceId });
+
+    //     if (existingDevice) {
+    //         // Update existing device
+    //         Object.assign(existingDevice, deviceData);
+    //         existingDevice.lastSeen = new Date();
+    //         existingDevice.status = 'online';
+    //         // Initialize currentMedia if null
+    //         if (existingDevice.currentMedia === undefined) {
+    //             existingDevice.currentMedia = null;
+    //         }
+    //         return await existingDevice.save();
+    //     } else {
+    //         // Create new device
+    //         const newDevice = new DeviceModel({
+    //             ...deviceData,
+    //             status: 'online',
+    //             lastSeen: new Date(),
+    //             currentMedia: null
+    //         });
+    //         console.log('regis device', newDevice)
+    //         return await newDevice.save();
+    //     }
+    // }
     static async registerDevice(deviceData: Partial<Device>): Promise<DeviceDocument> {
         const existingDevice = await DeviceModel.findOne({ deviceId: deviceData.deviceId });
 
         if (existingDevice) {
-            // Update existing device
-            Object.assign(existingDevice, deviceData);
+            // Check if it's the same socket trying to register again
+            if (existingDevice.socketId === deviceData.socketId) {
+                console.log(`[DEVICE-SERVICE] Device ${deviceData.deviceId} already registered with same socket, skip update`);
+                return existingDevice;
+            }
+
+            // Update only necessary fields
+            existingDevice.socketId = deviceData.socketId;
             existingDevice.lastSeen = new Date();
             existingDevice.status = 'online';
-            // Initialize currentMedia if null
-            if (existingDevice.currentMedia === undefined) {
+
+            // Keep existing currentMedia if any
+            if (!existingDevice.currentMedia) {
                 existingDevice.currentMedia = null;
             }
+
             return await existingDevice.save();
         } else {
             // Create new device
@@ -194,7 +227,6 @@ export class DeviceService {
                 lastSeen: new Date(),
                 currentMedia: null
             });
-            console.log('regis device', newDevice)
             return await newDevice.save();
         }
     }
@@ -225,8 +257,8 @@ export class DeviceService {
         //     .populate('currentMedia.mediaId', 'name') 
         //     .sort({ lastSeen: -1 });
         const devices = await DeviceModel.find(query)
-        .sort({ lastSeen: -1 });
-        
+            .sort({ lastSeen: -1 });
+
         // Sort by IP address (convert to number for proper sorting)
         return devices.sort((a, b) => {
             const ipA = this.ipToNumber(a.ipAddress);
@@ -295,6 +327,34 @@ export class DeviceService {
         }
 
         return updatedDevice;
+    }
+
+    static async updateDeviceCurrentPlaylist(
+        deviceId: string,
+        playlistId: string,
+        playlistName: string,
+        options: any = {}
+    ): Promise<DeviceDocument | null> {
+        const currentMediaUpdate = {
+            playlistId,
+            name: playlistName,
+            type: 'playlist',  // Optional: mark as playlist
+            isPlaying: options.autoplay !== undefined ? options.autoplay : true,
+            volume: options.volume || 50,
+            options: options  // Extra options (autoplay, loop, etc.)
+        };
+
+        const updateData = {
+            status: 'busy',
+            lastSeen: new Date(),
+            currentMedia: currentMediaUpdate
+        };
+
+        return await DeviceModel.findOneAndUpdate(
+            { deviceId },
+            { $set: updateData },
+            { new: true }
+        );
     }
 
     /**

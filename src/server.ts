@@ -13,7 +13,6 @@ import { SocketManager } from './services/socket.service';
 import deviceRoutes from './routes/devices';
 import mediaRoutes from './routes/media';
 import { castRoutes } from './routes/cast';
-import { templateRoutes } from './routes/templates'
 import { gridComposerRoutes } from './routes/grid-composer';
 import { playlistRoutes } from './routes/playlists';
 
@@ -47,7 +46,6 @@ app.use('/media', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/devices', deviceRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/cast', castRoutes);
-app.use('/api/templates', templateRoutes);
 app.use('/api/grid-composer', gridComposerRoutes);
 app.use('/api/playlists', playlistRoutes);
 
