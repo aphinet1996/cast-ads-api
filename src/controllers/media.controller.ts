@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { MediaService } from '../services/media.service';
+import path from 'path';
 
 export class MediaFileController {
     /**
@@ -9,7 +10,7 @@ export class MediaFileController {
     static async getAllMediaFiles(req: Request, res: Response) {
         try {
             const { type, search, limit } = req.query;
-            
+
             const mediaFiles = await MediaService.getAllMediaFiles({
                 type: type as string,
                 search: search as string,
@@ -152,6 +153,38 @@ export class MediaFileController {
             res.status(500).json({
                 success: false,
                 message: 'Error fetching media file',
+                error: error.message
+            });
+        }
+    }
+
+    static async uploadMediaFile(req: Request, res: Response) {
+        try {
+            if (!req.file) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No file uploaded'
+                });
+            }
+
+            // ใช้ createMediaFile ที่จะ generate mediaId, url, type เอง
+            const mediaFile = await MediaService.createMediaFile({
+                originalName: req.file.originalname,
+                name: path.parse(req.file.originalname).name,
+                path: req.file.path,
+                size: req.file.size,
+                mimeType: req.file.mimetype
+            });
+
+            res.status(201).json({
+                success: true,
+                message: 'File uploaded successfully',
+                data: MediaService.toPublicJSON(mediaFile)
+            });
+        } catch (error: any) {
+            res.status(500).json({
+                success: false,
+                message: 'Error uploading file',
                 error: error.message
             });
         }

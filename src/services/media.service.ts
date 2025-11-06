@@ -5,50 +5,50 @@
 // import fs from 'fs/promises';
 
 // export class MediaService {
-//     static async saveMediaFile(fileInfo: {
-//         originalName: string;
-//         filename: string;
-//         path: string;
-//         size: number;
-//         mimeType: string;
-//     }): Promise<MediaFile> {
-//         const mediaId = uuidv4();
-//         const baseUrl = process.env.BASE_URL;
+    // static async saveMediaFile(fileInfo: {
+    //     originalName: string;
+    //     filename: string;
+    //     path: string;
+    //     size: number;
+    //     mimeType: string;
+    // }): Promise<MediaFile> {
+    //     const mediaId = uuidv4();
+    //     const baseUrl = process.env.BASE_URL;
 
-//         // Determine media type based on mime type
-//         const type = MediaService.getMediaType(fileInfo.mimeType);
+    //     // Determine media type based on mime type
+    //     const type = MediaService.getMediaType(fileInfo.mimeType);
 
-//         try {
-//             const mediaFile = new MediaFileModel({
-//                 mediaId: mediaId,
-//                 name: path.parse(fileInfo.originalName).name,
-//                 originalName: fileInfo.originalName,
-//                 path: fileInfo.path,
-//                 url: `${baseUrl}/media/${fileInfo.filename}`,
-//                 type: type,
-//                 mimeType: fileInfo.mimeType,
-//                 size: fileInfo.size,
-//                 metadata: {},
-//                 uploadedAt: new Date()
-//             });
+    //     try {
+    //         const mediaFile = new MediaFileModel({
+    //             mediaId: mediaId,
+    //             name: path.parse(fileInfo.originalName).name,
+    //             originalName: fileInfo.originalName,
+    //             path: fileInfo.path,
+    //             url: `${baseUrl}/media/${fileInfo.filename}`,
+    //             type: type,
+    //             mimeType: fileInfo.mimeType,
+    //             size: fileInfo.size,
+    //             metadata: {},
+    //             uploadedAt: new Date()
+    //         });
 
-//             console.log('Creating media file with data:', {
-//                 mediaId,
-//                 name: path.parse(fileInfo.originalName).name,
-//                 originalName: fileInfo.originalName,
-//                 type,
-//                 size: fileInfo.size
-//             });
+    //         console.log('Creating media file with data:', {
+    //             mediaId,
+    //             name: path.parse(fileInfo.originalName).name,
+    //             originalName: fileInfo.originalName,
+    //             type,
+    //             size: fileInfo.size
+    //         });
 
-//             const saved = await mediaFile.save();
-//             console.log('Media file saved successfully:', saved.mediaId);
+    //         const saved = await mediaFile.save();
+    //         console.log('Media file saved successfully:', saved.mediaId);
 
-//             return this.transformMediaFile(saved);
-//         } catch (error) {
-//             console.error('Error saving media file:', error);
-//             throw error;
-//         }
-//     }
+    //         return this.transformMediaFile(saved);
+    //     } catch (error) {
+    //         console.error('Error saving media file:', error);
+    //         throw error;
+    //     }
+    // }
 
 //     static async getAllMediaFiles(): Promise<MediaFile[]> {
 //         const files = await MediaFileModel.find({}).lean();
@@ -114,6 +114,8 @@
 
 import { MediaFileModel, MediaFileDocument } from '../models/media';
 import { MediaFile } from '../types';
+import { v4 as uuidv4 } from 'uuid';
+import path from 'path';
 
 export class MediaService {
     /**
@@ -163,9 +165,59 @@ export class MediaService {
     /**
      * Create new media file
      */
-    static async createMediaFile(mediaData: Partial<MediaFile>): Promise<MediaFileDocument> {
-        const newMedia = new MediaFileModel(mediaData);
-        return await newMedia.save();
+    // static async createMediaFile(mediaData: Partial<MediaFile>): Promise<MediaFileDocument> {
+    //     const newMedia = new MediaFileModel(mediaData);
+    //     return await newMedia.save();
+    // }
+    static async createMediaFile(fileInfo: {
+        originalName: string;
+        name: string;
+        path: string;
+        size: number;
+        mimeType: string;
+        duration?: number;
+    }): Promise<MediaFileDocument> {
+        const mediaId = uuidv4();
+        
+        // Extract filename from path
+        const filename = path.basename(fileInfo.path);
+        const baseUrl = process.env.BASE_URL;
+        
+        // Determine media type based on mime type
+        const type = MediaService.getMediaType(fileInfo.mimeType);
+
+        try {
+            const mediaFile = new MediaFileModel({
+                mediaId: mediaId,
+                name: fileInfo.name,
+                originalName: fileInfo.originalName,
+                path: fileInfo.path,
+                url: `${baseUrl}/media/${filename}`,
+                type: type,
+                mimeType: fileInfo.mimeType,
+                size: fileInfo.size,
+                duration: fileInfo.duration,
+                metadata: {},
+                uploadedAt: new Date()
+            });
+
+            console.log('Creating media file with data:', {
+                mediaId,
+                name: fileInfo.name,
+                originalName: fileInfo.originalName,
+                type,
+                size: fileInfo.size,
+                url: `${baseUrl}/media/${filename}`
+            });
+
+            const saved = await mediaFile.save();
+            console.log('Media file saved successfully:', saved.mediaId);
+
+            return saved;
+        } catch (error) {
+            console.error('Error saving media file:', error);
+            throw error;
+        }
     }
 
     /**
@@ -235,6 +287,15 @@ export class MediaService {
         return await MediaFileModel.find()
             .sort({ uploadedAt: -1 })
             .limit(limit);
+    }
+
+    private static getMediaType(mimeType: string): MediaFile['type'] {
+        if (mimeType.startsWith('video/')) return 'video';
+        if (mimeType.startsWith('audio/')) return 'audio';
+        if (mimeType.startsWith('image/')) return 'image';
+        if (mimeType.includes('pdf')) return 'document';
+        if (mimeType.includes('presentation') || mimeType.includes('powerpoint')) return 'presentation';
+        return 'document';
     }
 
     /**

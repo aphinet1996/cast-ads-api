@@ -66,6 +66,7 @@
 
 import { Router } from 'express';
 import { MediaFileController } from '../controllers/media.controller';
+import { uploadMiddleware } from '../middleware/upload';
 
 const router = Router();
 
@@ -83,6 +84,8 @@ router.get('/type/:type', MediaFileController.getMediaFilesByType);
 
 // Get all media files with optional filters
 router.get('/', MediaFileController.getAllMediaFiles);
+
+router.post('/upload', uploadMiddleware.single('media'), MediaFileController.uploadMediaFile);
 
 // Create new media file
 router.post('/', MediaFileController.createMediaFile);
