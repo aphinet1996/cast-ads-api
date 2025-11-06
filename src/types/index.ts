@@ -17,7 +17,17 @@ export interface Device {
   // capabilities: string[];
   status: 'online' | 'offline' | 'busy';
   lastSeen: Date;
-  currentMedia?: MediaFile | null;
+  currentMedia?: 
+    | MediaFile
+    | {
+        name: string;
+        playlistId?: string;
+        type?: 'media' | 'playlist';
+        isPlaying?: boolean;
+        volume?: number;
+        options?: any;
+      }
+    | null;
   socketId?: string;
 }
 
@@ -159,8 +169,7 @@ export interface SocketEvents {
   'device:register': (deviceInfo: Partial<Device>) => void;
   'device:stimulate': (deviceId: string) => void;
   'device:update-name': (deviceId: string, name: string) => void;
-  'media:cast': (castRequest: CastRequest) => void;
-  'template:cast': (templateCastRequest: TemplateCastRequest) => void;
+  // 'media:cast': (castRequest: CastRequest) => void;
   'playlist:cast': (playlistCastRequest: PlaylistCastRequest) => void;
   'playback:control': (deviceId: string, control: PlaybackControl | TemplatePlaybackControl) => void;
   'device:status': (deviceId: string, status: Device['status']) => void;

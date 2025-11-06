@@ -12,56 +12,6 @@ export interface GridComposerConfig {
 }
 
 export class ImageComposerService {
-    //   static async createGridComposite(config: GridComposerConfig): Promise<{
-    //     path: string; 
-    //     filename: string;
-    //     size: number;
-    //   }> {
-
-    //     const outputFilename = `composite-${uuidv4()}.jpg`;
-    //     const outputPath = path.join(__dirname, '../../uploads', outputFilename);
-
-    //     // Create blank canvas
-    //     const canvas = sharp({
-    //       create: {
-    //         width: config.width,
-    //         height: config.height,
-    //         channels: 3,
-    //         background: { r: 255, g: 255, b: 255 }
-    //       }
-    //     });
-
-    //     const composites: sharp.OverlayOptions[] = [];
-
-    //     switch (config.type) {
-    //       case 'split-horizontal':
-    //         await this.createSplitHorizontalLayout(config, composites);
-    //         break;
-
-    //       case 'quad':
-    //         await this.createQuadLayout(config, composites);
-    //         break;
-
-    //       case 'fullscreen':
-    //         await this.createFullscreenLayout(config, composites);
-    //         break;
-    //     }
-
-    //     // Composite all images
-    //     await canvas
-    //       .composite(composites)
-    //       .jpeg({ quality: 90 })
-    //       .toFile(outputPath);
-
-    //     // Get file size
-    //     const stats = await fs.stat(outputPath);
-
-    //     return { 
-    //       path: outputPath, 
-    //       filename: outputFilename,
-    //       size: stats.size
-    //     };
-    //   }
 
     static async createGridComposite(config: GridComposerConfig): Promise<{
         path: string;

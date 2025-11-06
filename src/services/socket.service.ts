@@ -1,13 +1,23 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { DeviceService } from './device.service';
-import { MediaService } from './media.service';
-import { MediaFile, PlaybackControl, CastRequest } from '../types';
-import { Template } from '../models/template';
+import { PlaybackControl } from '../types';
 
 export class SocketManager {
   private static instance: SocketManager;
   private io: SocketIOServer | null = null;
-  private deviceSockets: Map<string, string> = new Map(); // deviceId -> socketId
+  private deviceSockets: Map<string, string> = new Map();
+  private registeredDevices: Set<string> = new Set();
+
+  private lastCommands: Map<string, { action: string; timestamp: number }> = new Map();
+  private readonly COMMAND_DEBOUNCE_MS = 1000; // 1 วินาที
+
+
+  private lastCastEvents: Map<string, { mediaId: string; timestamp: number }> = new Map();
+  private readonly CAST_DEBOUNCE_MS = 2000; // ป้องกัน duplicate cast ภายใน 2 วินาที
+
+  // ✅ Single debounce timer for all broadcast operations
+  private deviceUpdateTimer: NodeJS.Timeout | null = null;
+  private readonly DEBOUNCE_MS = 1000; // 300ms debounce
 
   static getInstance(): SocketManager {
     if (!SocketManager.instance) {
@@ -26,27 +36,41 @@ export class SocketManager {
     if (!this.io) return;
 
     this.io.on('connection', (socket: Socket) => {
-      console.log(`Socket connected: ${socket.id}`);
+      console.log(`[SOCKET] Connected: ${socket.id}`);
 
       // Device registration
       socket.on('device:register', async (deviceInfo) => {
         try {
+          // ✅ Check if already registered with same socket
+          if (this.registeredDevices.has(deviceInfo.deviceId)) {
+            const existingSocketId = this.deviceSockets.get(deviceInfo.deviceId);
+            if (existingSocketId === socket.id) {
+              console.log(`[SOCKET] Device ${deviceInfo.deviceId} already registered, skipping`);
+              return;
+            }
+            if (existingSocketId && existingSocketId !== socket.id) {
+              console.log(`[SOCKET] Device ${deviceInfo.deviceId} switching socket`);
+              this.deviceSockets.delete(deviceInfo.deviceId);
+            }
+          }
+
           const device = await DeviceService.registerDevice({
             ...deviceInfo,
             socketId: socket.id
           });
 
           this.deviceSockets.set(device.deviceId, socket.id);
+          this.registeredDevices.add(device.deviceId);
           socket.join(`device:${device.deviceId}`);
 
-          console.log(`Device registered: ${device.deviceName} (${device.deviceId})`);
+          console.log(`[SOCKET] Device registered: ${device.deviceName}`);
 
-          // Broadcast updated device list
-          this.broadcastDeviceList();
+          // ✅ Use debounced broadcast
+          this.broadcastDeviceListDebounced();
 
           socket.emit('device:register', { success: true, device });
         } catch (error) {
-          console.error('Error registering device:', error);
+          console.error('[SOCKET] Registration error:', error);
           socket.emit('error', 'Failed to register device');
         }
       });
@@ -57,21 +81,6 @@ export class SocketManager {
         this.deviceSockets.set(deviceId, socket.id);
       });
 
-      // Cast media
-      socket.on('media:cast', async (castRequest: CastRequest) => {
-        this.handleCastRequest(socket, castRequest);
-      });
-
-      // Cast template
-      socket.on('template:cast', async (templateCastRequest: {
-        templateId: string;
-        deviceId: string;
-        template: Template;
-        options?: any;
-      }) => {
-        this.handleTemplateCastRequest(socket, templateCastRequest);
-      });
-
       // Playback control
       socket.on('playback:control', (deviceId: string, control: PlaybackControl) => {
         this.sendPlaybackControl(deviceId, control);
@@ -80,233 +89,70 @@ export class SocketManager {
       // Device status update
       socket.on('device:status', async (deviceId: string, status: 'online' | 'offline' | 'busy') => {
         await DeviceService.updateDeviceStatus(deviceId, status);
-        this.broadcastDeviceList();
+        // ✅ Use debounced broadcast to prevent spam
+        this.broadcastDeviceListDebounced();
       });
 
       // Handle disconnection
-      socket.on('disconnect', async () => {
-        console.log(`Socket disconnected: ${socket.id}`);
+      // socket.on('disconnect', async () => {
+      //   console.log(`[SOCKET] Disconnected: ${socket.id}`);
 
-        // Find and update device status
+      //   for (const [deviceId, socketId] of this.deviceSockets.entries()) {
+      //     if (socketId === socket.id) {
+      //       // Give time to reconnect before marking offline
+      //       setTimeout(async () => {
+      //         if (!this.deviceSockets.has(deviceId) || this.deviceSockets.get(deviceId) === socket.id) {
+      //           await DeviceService.updateDeviceStatus(deviceId, 'offline');
+      //           this.deviceSockets.delete(deviceId);
+      //           this.registeredDevices.delete(deviceId);
+      //           this.broadcastDeviceListDebounced();
+      //         }
+      //       }, 5000);
+      //       break;
+      //     }
+      //   }
+      // });
+      socket.on('disconnect', async () => {
+        console.log(`[SOCKET] Disconnected: ${socket.id}`);
+
         for (const [deviceId, socketId] of this.deviceSockets.entries()) {
           if (socketId === socket.id) {
-            await DeviceService.updateDeviceStatus(deviceId, 'offline');
-            this.deviceSockets.delete(deviceId);
+            // ✅ Clear last cast tracking
+            this.clearLastCast(deviceId);
+
+            // Give time to reconnect before marking offline
+            setTimeout(async () => {
+              if (!this.deviceSockets.has(deviceId) || this.deviceSockets.get(deviceId) === socket.id) {
+                await DeviceService.updateDeviceStatus(deviceId, 'offline');
+                this.deviceSockets.delete(deviceId);
+                this.registeredDevices.delete(deviceId);
+                this.broadcastDeviceListDebounced();
+              }
+            }, 5000);
             break;
           }
         }
-
-        this.broadcastDeviceList();
       });
     });
   }
 
-  // private async handleCastRequest(socket: Socket, castRequest: CastRequest): Promise<void> {
-  //   try {
-  //     const device = await DeviceService.getDeviceById(castRequest.deviceId);
-  //     if (!device || device.status !== 'online') {
-  //       socket.emit('error', 'Device not available');
-  //       return;
-  //     }
-
-  //     // Send cast command to target device
-  //     this.io?.to(`device:${castRequest.deviceId}`).emit('media:play', {
-  //       mediaId: castRequest.mediaId,
-  //       options: castRequest.options
-  //     });
-
-  //     // Update device status
-  //     await DeviceService.updateDeviceStatus(castRequest.deviceId, 'busy');
-  //     this.broadcastDeviceList();
-
-  //     socket.emit('cast:success', {
-  //       deviceId: castRequest.deviceId,
-  //       mediaId: castRequest.mediaId
-  //     });
-  //   } catch (error) {
-  //     console.error('Error handling cast request:', error);
-  //     socket.emit('error', 'Failed to cast media');
-  //   }
-  // }
-  private async handleCastRequest(socket: Socket, castRequest: CastRequest): Promise<void> {
-    try {
-      const device = await DeviceService.getDeviceById(castRequest.deviceId);
-      if (!device || device.status !== 'online') {
-        socket.emit('error', 'Device not available');
-        return;
-      }
-
-      // Get media details for persist/emit
-      const mediaFile = await MediaService.findByMediaId(castRequest.mediaId);
-      if (!mediaFile) {
-        socket.emit('error', 'Media file not found');
-        return;
-      }
-
-      // Persist currentMedia in DB (set busy + media)
-      await DeviceService.updateDeviceCurrentMedia(castRequest.deviceId, castRequest.mediaId, castRequest.options);
-
-      // Emit to target device (once – no loop)
-      this.io?.to(`device:${castRequest.deviceId}`).emit('media:play', {
-        mediaId: castRequest.mediaId,
-        options: castRequest.options
-      });
-
-      // Broadcast updated list (now with populated currentMedia)
-      await this.broadcastDeviceList();
-
-      // Emit success with mediaName
-      socket.emit('cast:success', {
-        deviceId: castRequest.deviceId,
-        mediaId: castRequest.mediaId,
-        mediaName: mediaFile.name  // Add for frontend
-      });
-
-      console.log(`[SOCKET] ✅ Cast handled & persisted for ${mediaFile.name} to ${castRequest.deviceId}`);
-    } catch (error) {
-      console.error('Error handling cast request:', error);
-      socket.emit('error', 'Failed to cast media');
+  private broadcastDeviceListDebounced(): void {
+    if (this.deviceUpdateTimer) {
+      clearTimeout(this.deviceUpdateTimer);
     }
+
+    console.log('[SOCKET] Broadcast triggered by: register')
+
+    this.deviceUpdateTimer = setTimeout(async () => {
+      if (!this.io) return;
+
+      const devices = await DeviceService.getAllDevices();
+      this.io.emit('devices:updated', devices);
+      console.log('[SOCKET] 📡 Broadcasted device update (debounced)');
+    }, this.DEBOUNCE_MS);
   }
 
-  // NEW METHOD: Handle template cast request
-  private async handleTemplateCastRequest(
-    socket: Socket,
-    templateCastRequest: {
-      templateId: string;
-      deviceId: string;
-      template: Template;
-      options?: any;
-    }
-  ): Promise<void> {
-    try {
-      const device = await DeviceService.getDeviceById(templateCastRequest.deviceId);
-      if (!device || device.status !== 'online') {
-        socket.emit('error', 'Device not available');
-        return;
-      }
-
-      // Send template cast command to target device
-      this.io?.to(`device:${templateCastRequest.deviceId}`).emit('template:play', {
-        templateId: templateCastRequest.templateId,
-        template: templateCastRequest.template,
-        options: templateCastRequest.options || {
-          autoplay: true,
-          volume: 50,
-          loop: false
-        }
-      });
-
-      // Update device status
-      await DeviceService.updateDeviceStatus(templateCastRequest.deviceId, 'busy');
-      this.broadcastDeviceList();
-
-      socket.emit('template:cast:success', {
-        deviceId: templateCastRequest.deviceId,
-        templateId: templateCastRequest.templateId,
-        templateName: templateCastRequest.template.name
-      });
-    } catch (error) {
-      console.error('Error handling template cast request:', error);
-      socket.emit('error', 'Failed to cast template');
-    }
-  }
-
-  // castToDevice(deviceId: string, mediaFile: MediaFile, options?: any): boolean {
-  //   if (!this.io) return false;
-
-  //   const socketId = this.deviceSockets.get(deviceId);
-  //   if (!socketId) return false;
-
-  //   this.io.to(`device:${deviceId}`).emit('media:play', mediaFile, options);
-
-  //   // เพิ่ม: Emit 'cast:success' ไป all clients (sync dashboard)
-  //   this.io.emit('cast:success', {
-  //     deviceId,
-  //     mediaName: mediaFile.name,
-  //     mediaId: mediaFile.mediaId,
-  //     options: options || { autoplay: true, volume: 50 }
-  //   });
-
-  //   console.log(`[SOCKET] Cast success emitted for ${mediaFile.name} to ${deviceId}`);
-  //   return true;
-  // }
-
-  // async castToDevice(deviceId: string, mediaFile: MediaFile, options?: any): Promise<boolean> {
-  //   if (!this.io) return false;
-
-  //   const socketId = this.deviceSockets.get(deviceId);
-  //   if (!socketId) return false;
-
-  //   try {
-  //     // Persist first (await here – now async OK)
-  //     await DeviceService.updateDeviceCurrentMedia(deviceId, mediaFile.mediaId, options);
-
-  //     // Emit to device (once)
-  //     this.io.to(`device:${deviceId}`).emit('media:play', { mediaId: mediaFile.mediaId, options });
-
-  //     // Broadcast after persist (await if needed, but broadcastDeviceList should be async too if it has await)
-  //     await this.broadcastDeviceList();
-
-  //     // Emit success
-  //     this.io.emit('cast:success', {
-  //       deviceId,
-  //       mediaName: mediaFile.name,
-  //       mediaId: mediaFile.mediaId,
-  //       options: options || { autoplay: true, volume: 50 }
-  //     });
-
-  //     console.log(`[SOCKET] ✅ Cast persisted & emitted for ${mediaFile.name} to ${deviceId}`);
-  //     return true;
-  //   } catch (error) {
-  //     console.error('[SOCKET] Cast failed:', error);
-  //     return false;
-  //   }
-  // }
-
-  // NEW METHOD: Cast template to device
-  castTemplateToDevice(deviceId: string, template: Template, options?: any): boolean {
-    if (!this.io) return false;
-
-    const socketId = this.deviceSockets.get(deviceId);
-    if (!socketId) return false;
-
-    console.log(`Casting template ${template.name} to device ${deviceId}`);
-
-    // Send template to device with all necessary data
-    this.io.to(`device:${deviceId}`).emit('template:play', {
-      templateId: template.id,
-      template: template,
-      options: {
-        autoplay: true,
-        volume: 50,
-        loop: false,
-        ...options
-      }
-    });
-
-    // Also emit to dashboard for real-time updates
-    this.io.emit('template:cast:success', {
-      deviceId,
-      templateId: template.id,
-      templateName: template.name,
-      mediaName: template.name,
-      options: options
-    });
-
-    return true;
-  }
-
-  // castPlaylist(deviceId: string, playlistData: any): boolean {
-  //   if (!this.io) return false;
-
-  //   const socketId = this.deviceSockets.get(deviceId);
-  //   if (!socketId) return false;
-
-  //   this.io.to(`device:${deviceId}`).emit('playlist:play', playlistData);
-  //   return true;
-  // }
-
+  // Playlist cast
   castPlaylist(deviceId: string, playlistData: any): boolean {
     if (!this.io) {
       console.error('[SOCKET] IO not initialized');
@@ -315,21 +161,15 @@ export class SocketManager {
 
     const socketId = this.deviceSockets.get(deviceId);
     if (!socketId) {
-      console.error(`[SOCKET] Device ${deviceId} not connected (no socket)`);
+      console.error(`[SOCKET] Device ${deviceId} not connected`);
       return false;
     }
 
     console.log(`[SOCKET] Casting playlist "${playlistData.name}" to device ${deviceId}`);
-    console.log(`[SOCKET] Socket ID: ${socketId}`);
-    console.log(`[SOCKET] Playlist items count: ${playlistData.items.length}`);
-    console.log(`[SOCKET] First item:`, playlistData.items[0]);
 
-    // Send to specific device
     this.io.to(`device:${deviceId}`).emit('playlist:play', playlistData);
 
-    console.log('[SOCKET] ✅ playlist:play event emitted to device');
-
-    // Emit success to dashboard
+    // Emit success
     this.io.emit('playlist:cast:success', {
       deviceId,
       playlistId: playlistData.playlistId,
@@ -339,14 +179,26 @@ export class SocketManager {
     return true;
   }
 
-  // sendPlaybackControl(deviceId: string, control: PlaybackControl): boolean {
+  // Playback control
+  // async sendPlaybackControl(deviceId: string, control: PlaybackControl): Promise<boolean> {
   //   if (!this.io) return false;
 
   //   const socketId = this.deviceSockets.get(deviceId);
   //   if (!socketId) return false;
 
-  //   this.io.to(`device:${deviceId}`).emit('playback:command', control);
-  //   return true;
+  //   try {
+  //     // If stop, clear in DB
+  //     if (control.action === 'stop') {
+  //       await DeviceService.clearDeviceCurrentMedia(deviceId, true);
+  //       this.broadcastDeviceListDebounced();
+  //     }
+
+  //     this.io.to(`device:${deviceId}`).emit('playback:command', control);
+  //     return true;
+  //   } catch (error) {
+  //     console.error('[SOCKET] Playback control error:', error);
+  //     return false;
+  //   }
   // }
 
   async sendPlaybackControl(deviceId: string, control: PlaybackControl): Promise<boolean> {
@@ -356,90 +208,89 @@ export class SocketManager {
     if (!socketId) return false;
 
     try {
-      // If stop, clear in DB (await)
-      if (control.action === 'stop') {
-        await DeviceService.clearDeviceCurrentMedia(deviceId, true);  // toOnline: true
-        await this.broadcastDeviceList();
+      // ✅ ป้องกัน duplicate commands
+      const lastCommand = this.lastCommands.get(deviceId);
+      const now = Date.now();
+
+      if (lastCommand) {
+        const timeSinceLastCommand = now - lastCommand.timestamp;
+        const isSameAction = lastCommand.action === control.action;
+
+        if (isSameAction && timeSinceLastCommand < this.COMMAND_DEBOUNCE_MS) {
+          console.log(`[SOCKET] ⚠️ Duplicate ${control.action} command detected for ${deviceId}, skipping`);
+          return true;
+        }
       }
 
-      // Emit command
+      // บันทึก command ล่าสุด
+      this.lastCommands.set(deviceId, {
+        action: control.action,
+        timestamp: now
+      });
+
+      // If stop, clear in DB and clear last cast
+      if (control.action === 'stop') {
+        await DeviceService.clearDeviceCurrentMedia(deviceId, true);
+        this.clearLastCast(deviceId);
+        this.broadcastDeviceListDebounced();
+      }
+
       this.io.to(`device:${deviceId}`).emit('playback:command', control);
+      console.log(`[SOCKET] 🎮 Sent ${control.action} command to ${deviceId}`);
       return true;
     } catch (error) {
-      console.error('[SOCKET] Playback control failed:', error);
+      console.error('[SOCKET] Playback control error:', error);
       return false;
     }
   }
 
-  // NEW METHOD: Broadcast template update
-  broadcastTemplateUpdate(action: 'created' | 'updated' | 'deleted', template?: Template): void {
-    if (!this.io) return;
-
-    this.io.emit('template:updated', {
-      action,
-      template
-    });
-  }
-
-  // NEW METHOD: Send template stop command
-  stopTemplate(deviceId: string): boolean {
-    if (!this.io) return false;
-
-    const socketId = this.deviceSockets.get(deviceId);
-    if (!socketId) return false;
-
-    this.io.to(`device:${deviceId}`).emit('template:stop');
-    return true;
-  }
-
-  // NEW METHOD: Get connected devices count
+  // Get connected devices count
   getConnectedDevicesCount(): number {
     return this.deviceSockets.size;
   }
 
-  // NEW METHOD: Check if device is connected
+  // Check if device is connected
   isDeviceConnected(deviceId: string): boolean {
     return this.deviceSockets.has(deviceId);
   }
 
-  // NEW METHOD: Emit event to all clients
+  // Broadcast generic event
   broadcast(event: string, data: any): void {
     if (!this.io) return;
     this.io.emit(event, data);
   }
 
-  private async broadcastDeviceList(): Promise<void> {
-    if (!this.io) return;
-
-    const devices = await DeviceService.getAllDevices();
-    this.io.emit('devices:updated', devices);
-  }
-
+  // ✅ Periodic maintenance
   private startStimulate(): void {
     // Mark offline devices every minute
     setInterval(async () => {
       await DeviceService.markOfflineDevices();
-      this.broadcastDeviceList();
+      // ✅ Use debounced broadcast to prevent spam
+      this.broadcastDeviceListDebounced();
     }, 60000);
 
-    // Log connection statistics every 5 minutes
+    // Log statistics
     setInterval(() => {
-      console.log(`Socket connections: ${this.deviceSockets.size} devices connected`);
+      console.log(`[SOCKET] Connected devices: ${this.deviceSockets.size}`);
     }, 5 * 60000);
   }
 
-  // broadcastDeviceUpdate(device: any): void {
-  //   if (!this.io) {
-  //     console.warn('[SOCKET-MANAGER] ⚠️ Socket.IO not initialized, cannot broadcast device update');
-  //     return;
+  // // ✅ Send event directly to device (used by REST API)
+  // emitToDevice(deviceId: string, event: string, data: any): boolean {
+  //   if (!this.io) return false;
+
+  //   const socketId = this.deviceSockets.get(deviceId);
+  //   if (!socketId) {
+  //     console.error(`[SOCKET] Device ${deviceId} not connected`);
+  //     return false;
   //   }
 
-  //   console.log(`[SOCKET-MANAGER] 📡 Broadcasting device update: ${device.deviceName || device.deviceId}`);
-  //   this.io.emit('device:updated', device);
-  //   console.log('[SOCKET-MANAGER] ✅ Device update broadcasted to all clients');
+  //   // ✅ Send ONCE
+  //   this.io.to(`device:${deviceId}`).emit(event, data);
+  //   console.log(`[SOCKET] ✅ Emitted ${event} to device ${deviceId}`);
+  //   return true;
   // }
 
-  // ✅ เพิ่ม method ใหม่สำหรับส่ง event ตรงไปที่ device
   emitToDevice(deviceId: string, event: string, data: any): boolean {
     if (!this.io) return false;
 
@@ -449,62 +300,54 @@ export class SocketManager {
       return false;
     }
 
-    // ส่งครั้งเดียว
+    // ✅ ป้องกัน duplicate media:play events
+    if (event === 'media:play') {
+      const lastCast = this.lastCastEvents.get(deviceId);
+      const now = Date.now();
+      const mediaId = data.mediaId || data.mediaFile?.mediaId;
+
+      if (lastCast) {
+        const timeSinceLastCast = now - lastCast.timestamp;
+        const isSameMedia = lastCast.mediaId === mediaId;
+
+        // ถ้าเป็น media เดิมและยังไม่ถึง 2 วินาที ให้ skip
+        if (isSameMedia && timeSinceLastCast < this.CAST_DEBOUNCE_MS) {
+          console.log(`[SOCKET] ⚠️ Duplicate media:play detected for ${deviceId}, skipping`);
+          return true; // Return true เพื่อไม่ให้ API error
+        }
+      }
+
+      // บันทึก cast event ล่าสุด
+      this.lastCastEvents.set(deviceId, {
+        mediaId,
+        timestamp: now
+      });
+
+      console.log(`[SOCKET] ✅ Emitting media:play to ${deviceId} (mediaId: ${mediaId})`);
+    }
+
+    // ส่ง event ไปยัง device
     this.io.to(`device:${deviceId}`).emit(event, data);
-    console.log(`[SOCKET] Emitted ${event} to device ${deviceId}`);
+    console.log(`[SOCKET] 📤 Emitted ${event} to device ${deviceId}`);
     return true;
   }
 
-  // ✅ ปรับปรุง broadcastDeviceList ให้มี debounce
-  private deviceUpdateTimer: NodeJS.Timeout | null = null;
+  clearLastCast(deviceId: string): void {
+    this.lastCastEvents.delete(deviceId);
+    console.log(`[SOCKET] 🧹 Cleared last cast for device ${deviceId}`);
+  }
 
+  // ✅ Public method for manual broadcast (used by REST API)
   async broadcastDeviceUpdate(): Promise<void> {
-    // Clear existing timer
-    if (this.deviceUpdateTimer) {
-      clearTimeout(this.deviceUpdateTimer);
-    }
-
-    // Set new timer with debounce
-    this.deviceUpdateTimer = setTimeout(async () => {
-      if (!this.io) return;
-
-      const devices = await DeviceService.getAllDevices();
-      this.io.emit('devices:updated', devices);
-      console.log('[SOCKET] Broadcasted device update');
-    }, 100); // 100ms debounce
+    this.broadcastDeviceListDebounced();
   }
 
+  // ✅ DEPRECATED: Remove duplicate castToDevice method
+  // This is now handled by REST API + emitToDevice()
+  /*
   async castToDevice(deviceId: string, mediaFile: MediaFile, options?: any): Promise<boolean> {
-    if (!this.io) return false;
-
-    const socketId = this.deviceSockets.get(deviceId);
-    if (!socketId) return false;
-
-    try {
-      // ไม่ต้อง persist ที่นี่ (ทำที่ API route แล้ว)
-
-      // ส่งครั้งเดียว
-      this.io.to(`device:${deviceId}`).emit('media:play', {
-        mediaId: mediaFile.mediaId,
-        mediaFile,  // ส่ง mediaFile ทั้งหมด
-        options
-      });
-
-      // Emit success event
-      this.io.emit('cast:success', {
-        deviceId,
-        mediaName: mediaFile.name,
-        mediaId: mediaFile.mediaId,
-        options: options || { autoplay: true, volume: 50 }
-      });
-
-      console.log(`[SOCKET] ✅ Cast emitted for ${mediaFile.name} to ${deviceId}`);
-
-      // ไม่ broadcast ที่นี่ (ทำที่ API route แล้ว)
-      return true;
-    } catch (error) {
-      console.error('[SOCKET] Cast failed:', error);
-      return false;
-    }
+    // ❌ This method creates duplicate emissions
+    // Use REST API endpoint instead
   }
+  */
 }

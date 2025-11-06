@@ -81,53 +81,103 @@ export class PlaylistService {
         await PlaylistModel.deleteOne({ playlistId });
     }
 
-    //   static async castPlaylist(playlistId: string, deviceId: string, options?: any): Promise<void> {
+    // static async castPlaylist(playlistId: string, deviceId: string, options?: any): Promise<void> {
     //     const playlist = await PlaylistModel.findOne({ playlistId });
     //     if (!playlist) {
-    //       throw new Error('Playlist not found');
+    //         throw new Error('Playlist not found');
     //     }
 
     //     const device = await DeviceService.getDeviceById(deviceId);
     //     if (!device) {
-    //       throw new Error('Device not found');
+    //         throw new Error('Device not found');
     //     }
 
     //     if (device.status !== 'online') {
-    //       throw new Error('Device is not online');
+    //         throw new Error('Device is not online');
     //     }
 
     //     // Fetch full media details for each item
-    //     const itemsWithMedia = await Promise.all(
-    //       playlist.items.map(async (item) => {
-    //         const media = await MediaService.getMediaFileById(item.mediaId);
-    //         return {
-    //           mediaId: item.mediaId,
-    //           duration: item.duration,
-    //           transition: item.transition,
-    //           media: media
+    //     type PlaylistItemWithMedia = {
+    //         mediaId: string;
+    //         duration: number;
+    //         transition: 'fade' | 'slide' | 'none';
+    //         media: {
+    //             mediaId: string;
+    //             name: string;
+    //             url: string;
+    //             type: string;
+    //             mimeType: string;
+    //             size: number;
+    //             thumbnail?: string;
     //         };
-    //       })
+    //     };
+
+    //     const itemsWithMedia: Array<PlaylistItemWithMedia | null> = await Promise.all(
+    //         playlist.items.map(async (item) => {
+    //             const media = await MediaService.findByMediaId(item.mediaId);
+
+    //             if (!media) {
+    //                 console.error(`Media not found: ${item.mediaId}`);
+    //                 return null;
+    //             }
+
+    //             return {
+    //                 mediaId: item.mediaId,
+    //                 duration: item.duration,
+    //                 transition: item.transition,
+    //                 media: {
+    //                     mediaId: media.mediaId,
+    //                     name: media.name,
+    //                     url: media.url,
+    //                     type: media.type,
+    //                     mimeType: media.mimeType,
+    //                     size: media.size,
+    //                     thumbnail: media.thumbnail
+    //                 }
+    //             };
+    //         })
     //     );
 
+    //     // Filter out null values (media not found)
+    //     const validItems = itemsWithMedia.filter(
+    //         (item): item is PlaylistItemWithMedia => item !== null
+    //     );
+
+    //     if (validItems.length === 0) {
+    //         throw new Error('No valid media files found in playlist');
+    //     }
+
     //     const playlistData = {
-    //       playlistId: playlist.playlistId,
-    //       name: playlist.name,
-    //       items: itemsWithMedia,
-    //       loop: playlist.loop,
-    //       totalDuration: playlist.totalDuration,
-    //       options: options || { autoplay: true }
+    //         playlistId: playlist.playlistId,
+    //         name: playlist.name,
+    //         items: validItems,
+    //         loop: playlist.loop,
+    //         totalDuration: playlist.totalDuration,
+    //         options: options || { autoplay: true, volume: 50 }
     //     };
 
     //     // Send via socket
     //     const socketManager = SocketManager.getInstance();
-    //     const success = (socketManager as any).castPlaylist(deviceId, playlistData);
+    //     const success = socketManager.castPlaylist(deviceId, playlistData);
 
     //     if (success) {
-    //       await DeviceService.updateDeviceStatus(deviceId, 'busy');
+    //         console.log('Playlist cast command sent successfully via socket');
+    //         await DeviceService.updateDeviceStatus(deviceId, 'busy');
+
+    //         const emitSuccess = socketManager.emitToDevice(deviceId, 'cast:success', {
+    //             deviceId,
+    //             mediaName: playlist.name, 
+    //             options: options || { autoplay: true, volume: 50 }
+    //         });
+
+    //         if (!emitSuccess) {
+    //             console.warn('Failed to emit cast:success for frontend update');
+    //         }
     //     } else {
-    //       throw new Error('Failed to cast playlist to device');
+    //         console.error('[Failed to send playlist cast command');
+    //         throw new Error('Failed to cast playlist to device');
     //     }
-    //   }
+    // }
 
     static async castPlaylist(playlistId: string, deviceId: string, options?: any): Promise<void> {
         const playlist = await PlaylistModel.findOne({ playlistId });
@@ -144,7 +194,7 @@ export class PlaylistService {
             throw new Error('Device is not online');
         }
 
-        // Fetch full media details for each item
+        // Fetch full media details for each item (เดิม)
         type PlaylistItemWithMedia = {
             mediaId: string;
             duration: number;
@@ -204,16 +254,49 @@ export class PlaylistService {
             options: options || { autoplay: true, volume: 50 }
         };
 
-        // Send via socket
         const socketManager = SocketManager.getInstance();
-        const success = socketManager.castPlaylist(deviceId, playlistData);
 
-        if (success) {
+        try {
+            // Step 1: Persist currentMedia in DB first (ใหม่)
+            const dbUpdate = await DeviceService.updateDeviceCurrentPlaylist(
+                deviceId,
+                playlist.playlistId,
+                playlist.name,
+                options
+            );
+            if (!dbUpdate) {
+                throw new Error('Failed to update device current media in DB');
+            }
+
+            // Step 2: Send cast command to device (ONCE)
+            const emitSuccess = socketManager.emitToDevice(deviceId, 'playlist:play', playlistData);
+
+            if (!emitSuccess) {
+                // Rollback DB if emit failed
+                await DeviceService.clearDeviceCurrentMedia(deviceId, false);
+                throw new Error('Device not connected via socket');
+            }
+
+            // Step 3: Emit cast:success for frontend (uniform กับ media)
+            const frontendEmitSuccess = socketManager.emitToDevice(deviceId, 'cast:success', {
+                deviceId,
+                mediaName: playlist.name,
+                options: options || { autoplay: true, volume: 50 }
+            });
+
+            if (!frontendEmitSuccess) {
+                console.warn('Failed to emit cast:success for frontend update');
+            }
+
+            // Step 4: Broadcast device update ONCE (debounced)
+            await socketManager.broadcastDeviceUpdate();
+
             console.log('Playlist cast command sent successfully via socket');
-            await DeviceService.updateDeviceStatus(deviceId, 'busy');
-        } else {
-            console.error('[Failed to send playlist cast command');
-            throw new Error('Failed to cast playlist to device');
+        } catch (error) {
+            console.error('Failed to send playlist cast command:', error);
+            // Rollback ถ้า error
+            await DeviceService.clearDeviceCurrentMedia(deviceId, false);
+            throw error;
         }
     }
 

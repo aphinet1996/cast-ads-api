@@ -155,6 +155,31 @@ router.delete('/:id', async (req, res) => {
 });
 
 // POST /api/playlists/cast - Cast playlist to device
+// router.post('/cast', validateCastPlaylist, async (req, res) => {
+//     try {
+//         const { playlistId, deviceId, options } = req.body;
+
+//         await PlaylistService.castPlaylist(playlistId, deviceId, options);
+
+//         res.json({
+//             success: true,
+//             message: 'Playlist cast successfully',
+//             data: { playlistId, deviceId }
+//         });
+//     } catch (error: any) {
+//         console.error('Error casting playlist:', error);
+
+//         if (error.message.includes('not found') || error.message.includes('not online')) {
+//             return res.status(400).json({ success: false, error: error.message });
+//         }
+
+//         res.status(500).json({
+//             success: false,
+//             error: error.message || 'Failed to cast playlist'
+//         });
+//     }
+// });
+// POST /api/playlists/cast - Cast playlist to device
 router.post('/cast', validateCastPlaylist, async (req, res) => {
     try {
         const { playlistId, deviceId, options } = req.body;
@@ -164,7 +189,12 @@ router.post('/cast', validateCastPlaylist, async (req, res) => {
         res.json({
             success: true,
             message: 'Playlist cast successfully',
-            data: { playlistId, deviceId }
+            data: {
+                playlistId,
+                deviceId,
+                playlistName: req.body.name || 'Unknown Playlist',
+                options: options || { autoplay: true, volume: 50 }
+            }
         });
     } catch (error: any) {
         console.error('Error casting playlist:', error);

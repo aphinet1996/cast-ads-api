@@ -26,91 +26,101 @@ const router = Router();
 //       return res.status(404).json({ success: false, error: 'Media file not found' });
 //     }
 
-//     // Send cast command via socket
+//     // ✅ Step 1: Persist currentMedia in DB first
+//     await DeviceService.updateDeviceCurrentMedia(deviceId, mediaId, options);
+
+//     // ✅ Step 2: Send cast command to device (ONCE)
 //     const socketManager = SocketManager.getInstance();
-//     const success = socketManager.castToDevice(deviceId, mediaFile, options);
+//     const success = socketManager.emitToDevice(deviceId, 'media:play', {
+//       mediaId,
+//       mediaFile,
+//       options: options || { autoplay: true, volume: 50 }
+//     });
 
-//     if (success) {
-//       // Update device status
-//       await DeviceService.updateDeviceStatus(deviceId, 'busy');
+//     if (!success) {
+//       // Rollback DB if emit failed
+//       await DeviceService.clearDeviceCurrentMedia(deviceId, false);
+//       return res.status(400).json({ 
+//         success: false, 
+//         error: 'Device not connected via socket' 
+//       });
+//     }
 
-//       const socketManager = SocketManager.getInstance();
-//       socketManager.broadcast('cast:success', {
+//     // ✅ Step 3: Broadcast device update ONCE (debounced)
+//     await socketManager.broadcastDeviceUpdate();
+
+//     // ✅ Response to API caller
+//     res.json({
+//       success: true,
+//       message: 'Media cast successfully',
+//       data: {
 //         deviceId,
 //         mediaName: mediaFile.name,
 //         mediaId,
 //         options: options || { autoplay: true, volume: 50 }
-//       });
+//       }
+//     });
 
-//       res.json({
-//         success: true,
-//         message: 'Media cast successfully',
-//         data: {
-//           deviceId,
-//           mediaName: mediaFile.name,
-//           mediaId,
-//           options: options || { autoplay: true, volume: 50 }
-//         }
-//       });
-//     } else {
-//       res.status(400).json({ success: false, error: 'Failed to cast media' });
-//     }
 //   } catch (error) {
-//     console.error('Error casting media:', error);
+//     console.error('[CAST] Error casting media:', error);
 //     res.status(500).json({ success: false, error: 'Internal server error' });
 //   }
 // });
+
 router.post('/', validateCastRequest, async (req, res) => {
   try {
     const { deviceId, mediaId, options } = req.body;
 
+    console.log(`[CAST API] 📥 Received cast request: deviceId=${deviceId}, mediaId=${mediaId}`);
+
     // Verify device exists and is online
     const device = await DeviceService.getDeviceById(deviceId);
     if (!device) {
+      console.log(`[CAST API] ❌ Device not found: ${deviceId}`);
       return res.status(404).json({ success: false, error: 'Device not found' });
     }
     if (device.status !== 'online') {
+      console.log(`[CAST API] ❌ Device not online: ${deviceId} (status: ${device.status})`);
       return res.status(400).json({ success: false, error: 'Device is not online' });
     }
 
     // Verify media file exists
     const mediaFile = await MediaService.findByMediaId(mediaId);
     if (!mediaFile) {
+      console.log(`[CAST API] ❌ Media not found: ${mediaId}`);
       return res.status(404).json({ success: false, error: 'Media file not found' });
     }
 
-    // Persist currentMedia in DB (before emit)
+    console.log(`[CAST API] ✅ Cast validation passed, proceeding...`);
+
+    // ✅ Step 1: Persist currentMedia in DB first
     await DeviceService.updateDeviceCurrentMedia(deviceId, mediaId, options);
+    console.log(`[CAST API] 💾 Updated device currentMedia in DB`);
 
-    // Send cast command via socket (now await because async)
-    // const socketManager = SocketManager.getInstance();
-    // const success = await socketManager.castToDevice(deviceId, mediaFile, options); 
-
-    // if (success) {
-    //   res.json({
-    //     success: true,
-    //     message: 'Media cast successfully',
-    //     data: {  // Optional: return data for frontend
-    //       deviceId,
-    //       mediaName: mediaFile.name,
-    //       mediaId,
-    //       options: options || { autoplay: true, volume: 50 }
-    //     }
-    //   });
-    // } else {
-    //   res.status(400).json({ success: false, error: 'Failed to cast media' });
-    // }
+    // ✅ Step 2: Send cast command to device (ONCE, with duplicate protection in SocketManager)
     const socketManager = SocketManager.getInstance();
-    // ส่งตรงไปที่ device โดยไม่ผ่าน castToDevice()
-    socketManager.emitToDevice(deviceId, 'media:play', {
+    const success = socketManager.emitToDevice(deviceId, 'media:play', {
       mediaId,
       mediaFile,
       options: options || { autoplay: true, volume: 50 }
     });
 
-    // ✅ Broadcast device update หนึ่งครั้ง
+    if (!success) {
+      console.log(`[CAST API] ❌ Failed to emit to device, rolling back...`);
+      // Rollback DB if emit failed
+      await DeviceService.clearDeviceCurrentMedia(deviceId, false);
+      return res.status(400).json({
+        success: false,
+        error: 'Device not connected via socket'
+      });
+    }
+
+    console.log(`[CAST API] ✅ Cast command sent successfully`);
+
+    // ✅ Step 3: Broadcast device update ONCE (debounced)
     await socketManager.broadcastDeviceUpdate();
 
+    // ✅ Response to API caller
     res.json({
       success: true,
       message: 'Media cast successfully',
@@ -121,36 +131,14 @@ router.post('/', validateCastRequest, async (req, res) => {
         options: options || { autoplay: true, volume: 50 }
       }
     });
+
   } catch (error) {
-    console.error('Error casting media:', error);
+    console.error('[CAST API] ❌ Error casting media:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
 
 // POST /api/cast/:deviceId/control - Control playback
-// router.post('/:deviceId/control', validatePlaybackControl, async (req, res) => {
-//   try {
-//     const { deviceId } = req.params;
-//     const control = req.body;
-
-//     const device = await DeviceService.getDeviceById(deviceId);
-//     if (!device) {
-//       return res.status(404).json({ success: false, error: 'Device not found' });
-//     }
-
-//     const socketManager = SocketManager.getInstance();
-//     const success = socketManager.sendPlaybackControl(deviceId, control);
-
-//     if (success) {
-//       res.json({ success: true, message: 'Control command sent successfully' });
-//     } else {
-//       res.status(400).json({ success: false, error: 'Failed to send control command' });
-//     }
-//   } catch (error) {
-//     console.error('Error sending control command:', error);
-//     res.status(500).json({ success: false, error: 'Internal server error' });
-//   }
-// });
 router.post('/:deviceId/control', validatePlaybackControl, async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -162,15 +150,21 @@ router.post('/:deviceId/control', validatePlaybackControl, async (req, res) => {
     }
 
     const socketManager = SocketManager.getInstance();
-    const success = await socketManager.sendPlaybackControl(deviceId, control);  // Add await if sendPlaybackControl is async
+    const success = await socketManager.sendPlaybackControl(deviceId, control);
 
     if (success) {
-      res.json({ success: true, message: 'Control command sent successfully' });
+      res.json({
+        success: true,
+        message: 'Control command sent successfully'
+      });
     } else {
-      res.status(400).json({ success: false, error: 'Failed to send control command' });
+      res.status(400).json({
+        success: false,
+        error: 'Failed to send control command'
+      });
     }
   } catch (error) {
-    console.error('Error sending control command:', error);
+    console.error('[CAST] Error sending control command:', error);
     res.status(500).json({ success: false, error: 'Internal server error' });
   }
 });
