@@ -112,6 +112,62 @@ export class SocketManager {
       //     }
       //   }
       // });
+
+      // ========================================
+      // ✅ Playlist stopped event handler
+      // ========================================
+      socket.on('playlist:stopped', async (data: {
+        deviceId: string;
+        playlistId?: string;
+        timestamp?: string;
+        reason?: string;
+      }) => {
+        try {
+          console.log(`📥 [PLAYLIST STOP] Device: ${data.deviceId}, Playlist: ${data.playlistId || 'N/A'}`);
+
+          // 1. อัปเดตสถานะ device เป็น online
+          await DeviceService.updateDeviceStatus(data.deviceId, 'online');
+
+          // 2. Clear currentMedia/currentPlaylist
+          await DeviceService.clearDeviceCurrentMedia(data.deviceId, true);
+
+          // 3. Clear last cast tracking
+          this.clearLastCast(data.deviceId);
+
+          // 4. แจ้ง Web App ว่า playlist หยุดแล้ว
+          if (this.io) {
+            this.io.emit('playlist:status:changed', {
+              deviceId: data.deviceId,
+              playlistId: data.playlistId,
+              status: 'stopped',
+              timestamp: data.timestamp || new Date().toISOString(),
+              reason: data.reason || 'user_stopped'
+            });
+          }
+
+          // 5. Broadcast device update
+          this.broadcastDeviceListDebounced();
+
+          // 6. ส่ง acknowledgment กลับไป device
+          socket.emit('playlist:stop:acknowledged', {
+            success: true,
+            deviceId: data.deviceId,
+            playlistId: data.playlistId,
+            timestamp: new Date().toISOString()
+          });
+
+          console.log(`✅ [PLAYLIST STOP] Completed for device ${data.deviceId}`);
+
+        } catch (error) {
+          console.error('❌ [PLAYLIST STOP] Error:', error);
+          socket.emit('playlist:stop:acknowledged', {
+            success: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            deviceId: data.deviceId
+          });
+        }
+      });
+
       socket.on('disconnect', async () => {
         console.log(`[SOCKET] Disconnected: ${socket.id}`);
 
